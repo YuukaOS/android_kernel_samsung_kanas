@@ -29,6 +29,11 @@
 #include <trace/events/power.h>
 #include <linux/wakeup_reason.h>
 
+#ifdef CONFIG_QUICK_WAKEUP
+#include <linux/quickwakeup.h>
+#include <linux/wakelock.h>
+#endif
+
 #include "power.h"
 
 const char *const pm_states[PM_SUSPEND_MAX] = {
@@ -155,6 +160,37 @@ void __attribute__ ((weak)) arch_suspend_enable_irqs(void)
 	local_irq_enable();
 }
 
+static int _suspend_enter(suspend_state_t state, bool *wakeup, char *suspend_abort)
+{
+	int error;
+	arch_suspend_disable_irqs();
+	BUG_ON(!irqs_disabled());
+
+	error = syscore_suspend();
+	if (!error) {
+		*wakeup = pm_wakeup_pending();
+		if (!(suspend_test(TEST_CORE) || *wakeup)) {
+			error = suspend_ops->enter(state);
+			events_check_enabled = false;
+		} else if (*wakeup) {
+			pm_get_active_wakeup_sources(suspend_abort,
+				MAX_SUSPEND_ABORT_LEN);
+			log_suspend_abort_reason(suspend_abort);
+			error = -EBUSY;
+		}
+		syscore_resume();
+	}
+	if (!error) {
+#ifdef CONFIG_QUICK_WAKEUP
+		quickwakeup_check();
+#endif
+	}
+
+	arch_suspend_enable_irqs();
+	BUG_ON(irqs_disabled());
+	return error;
+}
+
 /**
  * suspend_enter - Make the system enter the given sleep state.
  * @state: System sleep state to enter.
@@ -198,27 +234,14 @@ static int suspend_enter(suspend_state_t state, bool *wakeup)
 		goto Enable_cpus;
 	}
 
-	arch_suspend_disable_irqs();
-	BUG_ON(!irqs_disabled());
-
-	error = syscore_suspend();
-	if (!error) {
-		*wakeup = pm_wakeup_pending();
-		if (!(suspend_test(TEST_CORE) || *wakeup)) {
-			error = suspend_ops->enter(state);
-			events_check_enabled = false;
-		} else if (*wakeup) {
-			pm_get_active_wakeup_sources(suspend_abort,
-				MAX_SUSPEND_ABORT_LEN);
-			log_suspend_abort_reason(suspend_abort);
-			error = -EBUSY;
+	error = _suspend_enter(state, wakeup, suspend_abort);
+#ifdef CONFIG_QUICK_WAKEUP
+		while (!error && !quickwakeup_execute()) {
+			if (has_wake_lock(WAKE_LOCK_SUSPEND))
+				break;
+			error = _suspend_enter(state, wakeup, suspend_abort);
 		}
-		syscore_resume();
-	}
-
-	arch_suspend_enable_irqs();
-	BUG_ON(irqs_disabled());
-
+#endif
  Enable_cpus:
 	enable_nonboot_cpus();
 
