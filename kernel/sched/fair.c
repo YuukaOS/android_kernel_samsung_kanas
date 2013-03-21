@@ -3416,11 +3416,14 @@ struct sd_lb_stats {
 	/* Varibles of power awaring scheduling */
 	unsigned int  sd_util;	/* sum utilization of this domain */
 	struct sched_group *group_leader; /* Group which relieves group_min */
+	struct sched_group *group_min;	/* Least loaded group in sd */
+	unsigned long min_load_per_task; /* load_per_task in group_min */
+	unsigned int  leader_util;	/* sum utilizations of group_leader */
+	unsigned int  min_util;		/* sum utilizations of group_min */
+
 
 #if defined(CONFIG_SCHED_MC) || defined(CONFIG_SCHED_SMT)
 	int power_savings_balance; /* Is powersave balance needed for this sd */
-	struct sched_group *group_min; /* Least loaded group in sd */
-	unsigned long min_load_per_task; /* load_per_task in group_min */
 	unsigned long leader_nr_running; /* Nr running of group_leader */
 	unsigned long min_nr_running; /* Nr running of group_min */
 #endif
