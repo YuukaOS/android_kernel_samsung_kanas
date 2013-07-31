@@ -834,8 +834,7 @@ void cpufreq_sysfs_remove_file(const struct attribute *attr)
 EXPORT_SYMBOL(cpufreq_sysfs_remove_file);
 
 /* symlink affected CPUs */
-static int cpufreq_add_dev_symlink(unsigned int cpu,
-				   struct cpufreq_policy *policy)
+static int cpufreq_add_dev_symlink(struct cpufreq_policy *policy)
 {
 	unsigned int j;
 	int ret = 0;
@@ -843,11 +842,11 @@ static int cpufreq_add_dev_symlink(unsigned int cpu,
 	for_each_cpu(j, policy->cpus) {
 		struct device *cpu_dev;
 
-		if (j == cpu)
+		if (j == policy->cpu)
 			continue;
 
 		pr_debug("Adding link for CPU: %u\n", j);
-		cpufreq_cpu_get(cpu);
+		cpufreq_cpu_get(policy->cpu);
 		cpu_dev = get_cpu_device(j);
 		ret = sysfs_create_link(&cpu_dev->kobj, &policy->kobj,
 					"cpufreq");
@@ -859,8 +858,7 @@ static int cpufreq_add_dev_symlink(unsigned int cpu,
 	return ret;
 }
 
-static int cpufreq_add_dev_interface(unsigned int cpu,
-				     struct cpufreq_policy *policy,
+static int cpufreq_add_dev_interface(struct cpufreq_policy *policy,
 				     struct device *dev)
 {
 	struct freq_attr **drv_attr;
@@ -896,7 +894,7 @@ static int cpufreq_add_dev_interface(unsigned int cpu,
 			goto err_out_kobj_put;
 	}
 
-	ret = cpufreq_add_dev_symlink(cpu, policy);
+	ret = cpufreq_add_dev_symlink(policy);
 	if (ret)
 		goto err_out_kobj_put;
 
@@ -1135,7 +1133,7 @@ static int __cpufreq_add_dev(struct device *dev, struct subsys_interface *sif,
 	write_unlock_irqrestore(&cpufreq_driver_lock, flags);
 
 	if (!frozen) {
-		ret = cpufreq_add_dev_interface(cpu, policy, dev);
+		ret = cpufreq_add_dev_interface(policy, dev);
 		if (ret)
 			goto err_out_unregister;
 	}
