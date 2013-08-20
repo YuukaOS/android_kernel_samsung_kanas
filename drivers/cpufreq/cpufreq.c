@@ -1006,6 +1006,7 @@ static int __cpufreq_add_dev(struct device *dev, struct subsys_interface *sif,
 		cpufreq_cpu_put(policy);
 		return 0;
 	}
+#endif
 
 	if (!down_read_trylock(&cpufreq_rwsem))
 		return 0;
@@ -1022,7 +1023,6 @@ static int __cpufreq_add_dev(struct device *dev, struct subsys_interface *sif,
 		}
 	}
 	read_unlock_irqrestore(&cpufreq_driver_lock, flags);
-#endif
 #endif
 
 	if (frozen)
