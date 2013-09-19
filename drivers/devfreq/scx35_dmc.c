@@ -293,7 +293,7 @@ static int scxx30_dmc_target(struct device *dev, unsigned long *_freq,
 	struct platform_device *pdev = container_of(dev, struct platform_device, dev);
 	struct dmcfreq_data *data = platform_get_drvdata(pdev);
 	struct opp *opp = devfreq_recommended_opp(dev, _freq, flags);
-	unsigned long freq = opp_get_freq(opp);
+	unsigned long freq = dev_pm_opp_get_freq(opp);
 	unsigned long old_freq = emc_clk_get()*1000 ;
 	unsigned char cp_req;
 #ifdef CONFIG_SCX35_DMC_FREQ_AP
@@ -341,7 +341,7 @@ static int scxx30_dmc_target(struct device *dev, unsigned long *_freq,
 		spin_unlock(&min_freq_cnt_lock);
 		freq += 1;
 		opp = devfreq_recommended_opp(dev, &freq, flags);
-		freq = opp_get_freq(opp);
+		freq = dev_pm_opp_get_freq(opp);
 	} else {
 		spin_lock(&min_freq_cnt_lock);
 		min_freq_cnt = 0;
@@ -368,7 +368,7 @@ static int scxx30_dmc_target(struct device *dev, unsigned long *_freq,
 		}
 	}
 #endif
-	dev_dbg(dev, "targetting %lukHz %luuV\n", freq, opp_get_voltage(opp));
+	dev_dbg(dev, "targetting %lukHz %luuV\n", freq, dev_pm_opp_get_voltage(opp));
 	freq = freq/1000; /* conver KHz to MHz */
 
 		/* Keep the current frequency if forbidden */
@@ -427,7 +427,7 @@ static int scxx30_dmc_get_dev_status(struct device *dev,
 		data->quirk_jiffies = jiffies;
 
 	stat->current_frequency = emc_clk_get() * 1000; /* KHz */
-	/* stat->current_frequency = opp_get_freq(data->curr_opp); */
+	/* stat->current_frequency = dev_pm_opp_get_freq(data->curr_opp); */
 	total_bw = (stat->current_frequency)*8; /* freq*2*32/8 */
 	pr_debug("*** %s, trans_bw:%lluB, curr freq:%lu, total_bw:%uKB ***\n",
 			__func__, trans_bw, stat->current_frequency, total_bw);
@@ -476,7 +476,7 @@ static int scxx30_init_tables(struct dmcfreq_data *data)
 	switch (data->type) {
 	case TYPE_DMC_SCXX30:
 		for (i = LV_0; i < SCXX30_LV_NUM; i++) {
-			err = opp_add(data->dev, scxx30_dmcclk_table[i].clk,
+			err = dev_pm_opp_add(data->dev, scxx30_dmcclk_table[i].clk,
 					scxx30_dmcclk_table[i].volt);
 			if (err) {
 				dev_err(data->dev, "Cannot add opp entries.\n");
@@ -594,14 +594,14 @@ static int scxx30_dmcfreq_probe(struct platform_device *pdev)
 		err = -EINVAL;
 	}
 	if (err)
-		goto err_opp_add;
+		goto err_dev_pm_opp_add;
 
-	opp = opp_find_freq_floor(dev, &scxx30_dmcfreq_profile.initial_freq);
+	opp = dev_pm_opp_find_freq_floor(dev, &scxx30_dmcfreq_profile.initial_freq);
 	if (IS_ERR(opp)) {
 		dev_err(dev, "Invalid initial frequency %lu kHz.\n",
 		       scxx30_dmcfreq_profile.initial_freq);
 		err = PTR_ERR(opp);
-		goto err_opp_add;
+		goto err_dev_pm_opp_add;
 	}
 	data->curr_opp = opp;
 	data->last_jiffies = jiffies;
@@ -611,7 +611,7 @@ static int scxx30_dmcfreq_probe(struct platform_device *pdev)
 	if (IS_ERR(data->devfreq)) {
 		err = PTR_ERR(data->devfreq);
 		dev_err(dev, "Failed to add device\n");
-		goto err_opp_add;
+		goto err_dev_pm_opp_add;
 	}
 
 	devfreq_register_opp_notifier(dev, data->devfreq);
@@ -664,7 +664,7 @@ static int scxx30_dmcfreq_probe(struct platform_device *pdev)
 	register_cpu_notifier(&devfreq_cpu_notifier);
 	g_dmcfreq_data = data;
 #endif
-	pr_info(" %s done,  current freq:%lu \n", __func__, opp_get_freq(data->curr_opp));
+	pr_info(" %s done,  current freq:%lu \n", __func__, dev_pm_opp_get_freq(data->curr_opp));
 	return 0;
 
 err_map:
@@ -677,7 +677,7 @@ err_cp1_irq:
 	free_irq(IRQ_CP0_MCU1_INT, data);
 err_devfreq_add:
 	devfreq_remove_device(data->devfreq);
-err_opp_add:
+err_dev_pm_opp_add:
 	kfree(data);
 	return err;
 }
