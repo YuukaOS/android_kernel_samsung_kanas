@@ -25,8 +25,6 @@
 #include <linux/vmalloc.h>
 #include "ion_priv.h"
 
-#include <asm/mach/map.h>
-
 struct ion_carveout_heap {
 	struct ion_heap heap;
 	struct gen_pool *pool;
@@ -114,40 +112,6 @@ void ion_carveout_heap_unmap_dma(struct ion_heap *heap,
 	buffer->sg_table=NULL;
 }
 
-void *ion_carveout_heap_map_kernel(struct ion_heap *heap,
-				   struct ion_buffer *buffer)
-{
-	void *ret;
-	int mtype = MT_MEMORY_NONCACHED;
-
-	if (buffer->flags & ION_FLAG_CACHED)
-		mtype = MT_MEMORY;
-
-	ret = __arm_ioremap(buffer->priv_phys, buffer->size,
-			      mtype);
-	if (ret == NULL)
-		return ERR_PTR(-ENOMEM);
-
-	return ret;
-}
-
-void ion_carveout_heap_unmap_kernel(struct ion_heap *heap,
-				    struct ion_buffer *buffer)
-{
-	__arm_iounmap(buffer->vaddr);
-	buffer->vaddr = NULL;
-	return;
-}
-
-int ion_carveout_heap_map_user(struct ion_heap *heap, struct ion_buffer *buffer,
-			       struct vm_area_struct *vma)
-{
-	return remap_pfn_range(vma, vma->vm_start,
-			       __phys_to_pfn(buffer->priv_phys) + vma->vm_pgoff,
-			       vma->vm_end - vma->vm_start,
-			       pgprot_noncached(vma->vm_page_prot));
-}
-
 #if defined(CONFIG_SPRD_IOMMU)
 int ion_carveout_heap_map_iommu(struct ion_buffer *buffer, int domain_num, unsigned long *ptr_iova)
 {
@@ -181,9 +145,9 @@ static struct ion_heap_ops carveout_heap_ops = {
 	.phys = ion_carveout_heap_phys,
 	.map_dma = ion_carveout_heap_map_dma,
 	.unmap_dma = ion_carveout_heap_unmap_dma,
-	.map_user = ion_carveout_heap_map_user,
-	.map_kernel = ion_carveout_heap_map_kernel,
-	.unmap_kernel = ion_carveout_heap_unmap_kernel,
+	.map_user = ion_heap_map_user,
+	.map_kernel = ion_heap_map_kernel,
+	.unmap_kernel = ion_heap_unmap_kernel,
 #if defined(CONFIG_SPRD_IOMMU)
 	.map_iommu = ion_carveout_heap_map_iommu,
 	.unmap_iommu = ion_carveout_heap_unmap_iommu,
