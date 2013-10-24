@@ -1329,7 +1329,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			return PTR_ERR(handle);
 		}
 
-		data.handle = (ion_user_handle_t)handle->id;
+		data.handle = handle->id;
 
 		if (copy_to_user((void __user *)arg, &data, sizeof(data))) {
 			ion_free(client, handle);
@@ -1346,7 +1346,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 				   sizeof(struct ion_handle_data)))
 			return -EFAULT;
 		mutex_lock(&client->lock);
-		handle = ion_uhandle_get(client, (int)data.handle);
+		handle = ion_uhandle_get(client, data.handle);
 		mutex_unlock(&client->lock);
 		if (!handle)
 		{
@@ -1364,7 +1364,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 		if (copy_from_user(&data, (void __user *)arg, sizeof(data)))
 			return -EFAULT;
-		handle = ion_uhandle_get(client, (int)data.handle);
+		handle = ion_uhandle_get(client, data.handle);
 		if(!handle)
 		{
 			pr_err("%s: ion map handle error!\n",__func__);
@@ -1395,7 +1395,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 			ret = PTR_ERR(handle);
 		}
 		else
-			data.handle = (ion_user_handle_t)handle->id;
+			data.handle = handle->id;
 
 		if (copy_to_user((void __user *)arg, &data,
 				 sizeof(struct ion_fd_data)))
