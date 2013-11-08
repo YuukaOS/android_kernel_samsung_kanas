@@ -120,8 +120,8 @@ static int ion_debug_heap_show_err(struct ion_heap *heap);
 
 bool ion_buffer_fault_user_mappings(struct ion_buffer *buffer)
 {
-	return ((buffer->flags & ION_FLAG_CACHED) &&
-		!(buffer->flags & ION_FLAG_CACHED_NEEDS_SYNC));
+	return (buffer->flags & ION_FLAG_CACHED) &&
+		!(buffer->flags & ION_FLAG_CACHED_NEEDS_SYNC);
 }
 
 bool ion_buffer_cached(struct ion_buffer *buffer)
@@ -212,7 +212,8 @@ static struct ion_buffer *ion_buffer_create(struct ion_heap *heap,
 	buffer->size = len;
 
 	table = heap->ops->map_dma(heap, buffer);
-	if (WARN_ONCE(table == NULL, "heap->ops->map_dma should return ERR_PTR on error"))
+	if (WARN_ONCE(table == NULL,
+			"heap->ops->map_dma should return ERR_PTR on error"))
 		table = ERR_PTR(-EINVAL);
 	if (IS_ERR(table)) {
 		pr_err("%s: table is error and table is 0x%x!\n",__func__,table);
@@ -432,7 +433,8 @@ static struct ion_handle *ion_handle_get_by_id(struct ion_client *client,
 	return handle ? handle : ERR_PTR(-EINVAL);
 }
 
-static bool ion_handle_validate(struct ion_client *client, struct ion_handle *handle)
+static bool ion_handle_validate(struct ion_client *client,
+				struct ion_handle *handle)
 {
 	WARN_ON(!mutex_is_locked(&client->lock));
 	return (idr_find(&client->idr, handle->id) == handle);
@@ -597,7 +599,8 @@ static void *ion_buffer_kmap_get(struct ion_buffer *buffer)
 		return buffer->vaddr;
 	}
 	vaddr = buffer->heap->ops->map_kernel(buffer->heap, buffer);
-	if (WARN_ONCE(vaddr == NULL, "heap->ops->map_kernel should return ERR_PTR on error"))
+	if (WARN_ONCE(vaddr == NULL,
+			"heap->ops->map_kernel should return ERR_PTR on error"))
 		return ERR_PTR(-EINVAL);
 	if (IS_ERR(vaddr))
 	{
@@ -1661,39 +1664,39 @@ static const struct file_operations debug_heap_fops = {
 #ifdef DEBUG_HEAP_SHRINKER
 static int debug_shrink_set(void *data, u64 val)
 {
-        struct ion_heap *heap = data;
-        struct shrink_control sc;
-        int objs;
+	struct ion_heap *heap = data;
+	struct shrink_control sc;
+	int objs;
 
-        sc.gfp_mask = -1;
-        sc.nr_to_scan = 0;
+	sc.gfp_mask = -1;
+	sc.nr_to_scan = 0;
 
-        if (!val)
-                return 0;
+	if (!val)
+		return 0;
 
-        objs = heap->shrinker.shrink(&heap->shrinker, &sc);
-        sc.nr_to_scan = objs;
+	objs = heap->shrinker.shrink(&heap->shrinker, &sc);
+	sc.nr_to_scan = objs;
 
-        heap->shrinker.shrink(&heap->shrinker, &sc);
-        return 0;
+	heap->shrinker.shrink(&heap->shrinker, &sc);
+	return 0;
 }
 
 static int debug_shrink_get(void *data, u64 *val)
 {
-        struct ion_heap *heap = data;
-        struct shrink_control sc;
-        int objs;
+	struct ion_heap *heap = data;
+	struct shrink_control sc;
+	int objs;
 
-        sc.gfp_mask = -1;
-        sc.nr_to_scan = 0;
+	sc.gfp_mask = -1;
+	sc.nr_to_scan = 0;
 
-        objs = heap->shrinker.shrink(&heap->shrinker, &sc);
-        *val = objs;
-        return 0;
+	objs = heap->shrinker.shrink(&heap->shrinker, &sc);
+	*val = objs;
+	return 0;
 }
 
 DEFINE_SIMPLE_ATTRIBUTE(debug_shrink_fops, debug_shrink_get,
-                        debug_shrink_set, "%llu\n");
+			debug_shrink_set, "%llu\n");
 #endif
 
 void ion_device_add_heap(struct ion_device *dev, struct ion_heap *heap)
