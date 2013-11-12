@@ -230,7 +230,7 @@ void ion_system_heap_free(struct ion_buffer *buffer)
 #ifndef BAD_PAGE_WORKAROUND	/* FIXME: this is a temp workaround */
 	for_each_sg(table->sgl, sg, table->nents, i)
 		free_buffer_page(sys_heap, buffer, sg_page(sg),
-				get_order(sg_dma_len(sg)));
+				get_order(sg->length));
 #else
 	/* we assume there's only one wrong sg node in the list, with 0 length,
 	 * and we assume its order is the smaller one of its two neighbours'
