@@ -409,10 +409,10 @@ static void alucard_check_cpu(struct cpufreq_alucard_cpuinfo *this_alucard_cpuin
 	/*printk(KERN_ERR "TIMER CPU[%u], wall[%u], idle[%u]\n",cpu, wall_time, idle_time);*/
 	if (wall_time >= idle_time) { /*if wall_time < idle_time, evaluate cpu load next time*/
 		cur_load = wall_time > idle_time ? (100 * (wall_time - idle_time)) / wall_time : 1;/*if wall_time is equal to idle_time cpu_load is equal to 1*/
-		tmp_freq = cpu_policy->cur;
 		/* Checking Frequency Limit */
 		min_freq = cpu_policy->min;
-		max_freq = cpu_policy->max;
+		/* Maximum increasing frequency possible */
+		max_freq = max(min(cur_load * (cpu_policy->max / 100), cpu_policy->max), min_freq);
 
 		freq_responsiveness = atomic_read(&alucard_tuners_ins.freq_responsiveness);
 	
@@ -588,7 +588,7 @@ static void __exit cpufreq_gov_alucard_exit(void)
 }
 
 MODULE_AUTHOR("Alucard24@XDA");
-MODULE_DESCRIPTION("'cpufreq_alucard' - A dynamic cpufreq governor v1.0 (SnapDragon)");
+MODULE_DESCRIPTION("'cpufreq_alucard' - A dynamic cpufreq governor v1.1 (SnapDragon)");
 MODULE_LICENSE("GPL");
 
 #ifdef CONFIG_CPU_FREQ_DEFAULT_GOV_ALUCARD
