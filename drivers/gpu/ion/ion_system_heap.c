@@ -26,7 +26,7 @@
 #include <linux/vmalloc.h>
 #include "ion_priv.h"
 
-static unsigned int high_order_gfp_flags = (GFP_HIGHUSER | __GFP_ZERO |
+static gfp_t high_order_gfp_flags = (GFP_HIGHUSER | __GFP_ZERO | __GFP_NOWARN |
 					    __GFP_NOWARN | __GFP_NORETRY |
 					    __GFP_NOMEMALLOC | __GFP_NO_KSWAPD) &
 					   ~__GFP_WAIT;
@@ -83,12 +83,12 @@ static struct page *alloc_buffer_page(struct ion_system_heap *heap,
 			gfp_flags = high_order_gfp_flags;
 		page = alloc_pages(gfp_flags, order);
 		if (!page)
-			return 0;
+			return NULL;
 		ion_pages_sync_for_device(NULL, page, PAGE_SIZE << order,
 						DMA_BIDIRECTIONAL);
 	}
 	if (!page)
-		return 0;
+		return NULL;
 
 	return page;
 }
@@ -206,7 +206,7 @@ err:
 
 
 #define BAD_PAGE_WORKAROUND
-void ion_system_heap_free(struct ion_buffer *buffer)
+static void ion_system_heap_free(struct ion_buffer *buffer)
 {
 	struct ion_heap *heap = buffer->heap;
 	struct ion_system_heap *sys_heap = container_of(heap,
@@ -261,14 +261,14 @@ void ion_system_heap_free(struct ion_buffer *buffer)
 	kfree(table);
 }
 
-struct sg_table *ion_system_heap_map_dma(struct ion_heap *heap,
-					 struct ion_buffer *buffer)
+static struct sg_table *ion_system_heap_map_dma(struct ion_heap *heap,
+						struct ion_buffer *buffer)
 {
 	return buffer->priv_virt;
 }
 
-void ion_system_heap_unmap_dma(struct ion_heap *heap,
-			       struct ion_buffer *buffer)
+static void ion_system_heap_unmap_dma(struct ion_heap *heap,
+				      struct ion_buffer *buffer)
 {
 	return;
 }
@@ -485,7 +485,7 @@ out:
 	return ret;
 }
 
-void ion_system_contig_heap_free(struct ion_buffer *buffer)
+static void ion_system_contig_heap_free(struct ion_buffer *buffer)
 {
 	struct sg_table *table = buffer->priv_virt;
 	struct page *page = sg_page(table->sgl);
@@ -509,14 +509,14 @@ static int ion_system_contig_heap_phys(struct ion_heap *heap,
 	return 0;
 }
 
-struct sg_table *ion_system_contig_heap_map_dma(struct ion_heap *heap,
+static struct sg_table *ion_system_contig_heap_map_dma(struct ion_heap *heap,
 						struct ion_buffer *buffer)
 {
 	return buffer->priv_virt;
 }
 
-void ion_system_contig_heap_unmap_dma(struct ion_heap *heap,
-				      struct ion_buffer *buffer)
+static void ion_system_contig_heap_unmap_dma(struct ion_heap *heap,
+					     struct ion_buffer *buffer)
 {
 }
 
