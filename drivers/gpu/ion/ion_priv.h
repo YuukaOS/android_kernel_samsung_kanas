@@ -18,6 +18,7 @@
 #define _ION_PRIV_H
 
 #include <linux/ion.h>
+#include <linux/device.h>
 #include <linux/dma-direction.h>
 #include <linux/kref.h>
 #include <linux/mm_types.h>
