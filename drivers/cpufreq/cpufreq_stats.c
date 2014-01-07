@@ -591,7 +591,7 @@ static void cpufreq_allstats_create(unsigned int cpu,
 static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 		unsigned long val, void *data)
 {
-	int ret, count = 0, i;
+	int ret = 0, count = 0, i;
 	struct cpufreq_policy *policy = data;
 	struct cpufreq_frequency_table *table;
 	unsigned int cpu_num, cpu = policy->cpu;
@@ -601,8 +601,6 @@ static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 		return 0;
 	}
 
-	if (val != CPUFREQ_NOTIFY)
-		return 0;
 	table = cpufreq_frequency_get_table(cpu);
 	if (!table)
 		return 0;
@@ -623,10 +621,16 @@ static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 			cpufreq_powerstats_create(cpu_num, table, count);
 	}
 
-	ret = cpufreq_stats_create_table(policy, table, count);
-	if (ret)
-		return ret;
-	return 0;
+	if (val == CPUFREQ_CREATE_POLICY)
+		ret = cpufreq_stats_create_table(policy, table, count);
+	else if (val == CPUFREQ_REMOVE_POLICY) {
+		/* This might already be freed by cpu hotplug notifier */
+		if (per_cpu(cpufreq_stats_table, cpu)) {
+			cpufreq_stats_free_sysfs(cpu);
+			cpufreq_stats_free_table(cpu);
+		}
+	}
+	return ret;
 }
 
 static int cpufreq_stat_notifier_trans(struct notifier_block *nb,
@@ -707,6 +711,10 @@ static int __cpuinit cpufreq_stat_cpu_callback(struct notifier_block *nfb,
 					       void *hcpu)
 {
 	unsigned int cpu = (unsigned long)hcpu;
+
+	/* Don't free/allocate stats during suspend/resume */
+	if (action & CPU_TASKS_FROZEN)
+		return 0;
 
 	switch (action) {
 	case CPU_DOWN_PREPARE:
