@@ -29,6 +29,7 @@
 #include <linux/spinlock.h>
 #include <linux/tick.h>
 #include <linux/device.h>
+#include <linux/sched.h>
 #include <linux/slab.h>
 #include <linux/cpu.h>
 #include <linux/completion.h>
@@ -1544,6 +1545,12 @@ int __cpufreq_driver_target(struct cpufreq_policy *policy,
 	if (cpufreq_driver->target)
 		retval = cpufreq_driver->target(policy, target_freq, relation);
 
+	if (likely(retval != -EINVAL)) {
+		if (target_freq == policy->max)
+			cpu_nonscaling(policy->cpu);
+		else
+			cpu_scaling(policy->cpu);
+	}
 	return retval;
 }
 EXPORT_SYMBOL_GPL(__cpufreq_driver_target);
