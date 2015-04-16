@@ -363,9 +363,9 @@ static void cpufreq_powerstats_free(void)
 }
 
 static int __cpufreq_stats_create_table(struct cpufreq_policy *policy,
-		struct cpufreq_frequency_table *table)
+		struct cpufreq_frequency_table *table, int count)
 {
-	unsigned int i, j, count = 0, ret = 0;
+	unsigned int i, j, ret = 0;
 	struct cpufreq_stats *stat;
 	unsigned int alloc_size;
 	unsigned int cpu = policy->cpu;
@@ -382,12 +382,6 @@ static int __cpufreq_stats_create_table(struct cpufreq_policy *policy,
 	stat->cpu = cpu;
 	per_cpu(cpufreq_stats_table, cpu) = stat;
 
-	for (i = 0; table[i].frequency != CPUFREQ_TABLE_END; i++) {
-		unsigned int freq = table[i].frequency;
-		if (freq == CPUFREQ_ENTRY_INVALID)
-			continue;
-		count++;
-	}
 
 	alloc_size = count * sizeof(int) + count * sizeof(u64);
 
@@ -425,26 +419,6 @@ error_out:
 	kfree(stat);
 	per_cpu(cpufreq_stats_table, cpu) = NULL;
 	return ret;
-}
-
-static void cpufreq_stats_create_table(unsigned int cpu)
-{
-	struct cpufreq_policy *policy;
-	struct cpufreq_frequency_table *table;
-
-	/*
-	 * "likely(!policy)" because normally cpufreq_stats will be registered
-	 * before cpufreq driver
-	 */
-	policy = cpufreq_cpu_get(cpu);
-	if (likely(!policy))
-		return;
-
-	table = cpufreq_frequency_get_table(policy->cpu);
-	if (likely(table))
-		__cpufreq_stats_create_table(policy, table);
-
-	cpufreq_cpu_put(policy);
 }
 
 static void cpufreq_stats_update_policy_cpu(struct cpufreq_policy *policy)
@@ -632,10 +606,44 @@ static int cpufreq_stat_notifier_policy(struct notifier_block *nb,
 	}
 
 	if (val == CPUFREQ_CREATE_POLICY)
-		ret = __cpufreq_stats_create_table(policy, table);
+		ret = __cpufreq_stats_create_table(policy, table, count);
 	else if (val == CPUFREQ_REMOVE_POLICY)
 		__cpufreq_stats_free_table(policy);
 	return ret;
+}
+
+static void cpufreq_stats_create_table(unsigned int cpu)
+{
+	struct cpufreq_policy *policy;
+	struct cpufreq_frequency_table *table;
+	int i, count = 0;
+	/*
+	 * "likely(!policy)" because normally cpufreq_stats will be registered
+	 * before cpufreq driver
+	*/
+	policy = cpufreq_cpu_get(cpu);
+	if (likely(!policy))
+		return;
+
+	table = cpufreq_frequency_get_table(policy->cpu);
+	if (likely(table)) {
+		for (i = 0; table[i].frequency != CPUFREQ_TABLE_END; i++) {
+			unsigned int freq = table[i].frequency;
+
+			if (freq == CPUFREQ_ENTRY_INVALID)
+				continue;
+			count++;
+		}
+
+		if (!per_cpu(all_cpufreq_stats, cpu))
+			cpufreq_allstats_create(cpu, table, count);
+
+		if (!per_cpu(cpufreq_power_stats, cpu))
+			cpufreq_powerstats_create(cpu, table, count);
+
+		__cpufreq_stats_create_table(policy, table, count);
+	}
+	cpufreq_cpu_put(policy);
 }
 
 static int cpufreq_stat_notifier_trans(struct notifier_block *nb,
