@@ -2,11 +2,11 @@
  * fs/sdcardfs/lookup.c
  *
  * Copyright (c) 2013 Samsung Electronics Co. Ltd
- *   Authors: Daeho Jeong, Woojoong Lee, Seunghwan Hyun, 
+ *   Authors: Daeho Jeong, Woojoong Lee, Seunghwan Hyun,
  *               Sunghwan Yun, Sungjong Seo
- *                      
+ *
  * This program has been developed as a stackable file system based on
- * the WrapFS which written by 
+ * the WrapFS which written by
  *
  * Copyright (c) 1998-2011 Erez Zadok
  * Copyright (c) 2009     Shrikar Archak
@@ -79,8 +79,7 @@ static int sdcardfs_inode_set(struct inode *inode, void *lower_inode)
 	return 0;
 }
 
-static struct inode *sdcardfs_iget(struct super_block *sb,
-				 struct inode *lower_inode)
+struct inode *sdcardfs_iget(struct super_block *sb, struct inode *lower_inode)
 {
 	struct sdcardfs_inode_info *info;
 	struct inode *inode; /* the new inode to return */
@@ -305,6 +304,7 @@ setup_lower:
 	 * the VFS will continue the process of making this negative dentry
 	 * into a positive one.
 	 */
+	if (flags & (LOOKUP_CREATE|LOOKUP_RENAME_TARGET))
 	err = 0;
 
 out:

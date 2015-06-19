@@ -1628,8 +1628,8 @@ struct buffer_head *ext4_find_inline_entry(struct inode *dir,
 						EXT4_INLINE_DOTDOT_SIZE;
 	inline_size = EXT4_MIN_INLINE_DATA_SIZE - EXT4_INLINE_DOTDOT_SIZE;
 #ifdef CONFIG_SDCARD_FS_CI_SEARCH
-	ret = search_dir(iloc.bh, inline_start, inline_size,
-			 dir, d_name, 0, res_dir, NULL);
+	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
+			      dir, fname, d_name, 0, res_dir, NULL);
 #else
 	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
 			      dir, fname, d_name, 0, res_dir);
@@ -1646,8 +1646,8 @@ struct buffer_head *ext4_find_inline_entry(struct inode *dir,
 	inline_size = ext4_get_inline_size(dir) - EXT4_MIN_INLINE_DATA_SIZE;
 
 #ifdef CONFIG_SDCARD_FS_CI_SEARCH
-	ret = search_dir(iloc.bh, inline_start, inline_size,
-			 dir, d_name, 0, res_dir, NULL);
+	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
+			      dir, fname, d_name, 0, res_dir, NULL);
 #else
 	ret = ext4_search_dir(iloc.bh, inline_start, inline_size,
 			      dir, fname, d_name, 0, res_dir);
