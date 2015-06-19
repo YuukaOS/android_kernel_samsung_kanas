@@ -1,17 +1,17 @@
 /*
  * fs/sdcardfs/sdcardfs.h
  *
- * The sdcardfs v2.0 
- *   This file system replaces the sdcard daemon on Android 
- *   On version 2.0, some of the daemon functions have been ported  
+ * The sdcardfs v2.0
+ *   This file system replaces the sdcard daemon on Android
+ *   On version 2.0, some of the daemon functions have been ported
  *   to support the multi-user concepts of Android 4.4
  *
  * Copyright (c) 2013 Samsung Electronics Co. Ltd
- *   Authors: Daeho Jeong, Woojoong Lee, Seunghwan Hyun, 
+ *   Authors: Daeho Jeong, Woojoong Lee, Seunghwan Hyun,
  *               Sunghwan Yun, Sungjong Seo
- *                      
+ *
  * This program has been developed as a stackable file system based on
- * the WrapFS which written by 
+ * the WrapFS which written by
  *
  * Copyright (c) 1998-2011 Erez Zadok
  * Copyright (c) 2009     Shrikar Archak
@@ -55,7 +55,7 @@
 
 #define SDCARDFS_DIRENT_SIZE 256
 
-/* temporary static uid settings for development */ 
+/* temporary static uid settings for development */
 #define AID_ROOT             0	/* uid for accessing /mnt/sdcard & extSdcard */
 #define AID_MEDIA_RW      1023	/* internal media storage write access */
 
@@ -74,13 +74,13 @@
 		(x)->i_mode = ((x)->i_mode & S_IFMT) | SDCARDFS_I(x)->d_mode;\
 	} while (0)
 
-/* OVERRIDE_CRED() and REVERT_CRED() 
- * 	OVERRID_CRED() 
+/* OVERRIDE_CRED() and REVERT_CRED()
+ * 	OVERRID_CRED()
  * 		backup original task->cred
  * 		and modifies task->cred->fsuid/fsgid to specified value.
  *	REVERT_CRED()
  * 		restore original task->cred->fsuid/fsgid.
- * These two macro should be used in pair, and OVERRIDE_CRED() should be 
+ * These two macro should be used in pair, and OVERRIDE_CRED() should be
  * placed at the beginning of a function, right after variable declaration.
  */
 #define OVERRIDE_CRED(sdcardfs_sbi, saved_cred)		\
@@ -97,7 +97,7 @@
 	printk("KAKJAGI: %s:%d fsuid %d fsgid %d\n", 	\
 		__FUNCTION__, __LINE__, 		\
 		(int)current->cred->fsuid, 		\
-		(int)current->cred->fsgid); 
+		(int)current->cred->fsgid);
 
 /* Android 4.4 support */
 
@@ -159,7 +159,9 @@ extern void sdcardfs_destroy_dentry_cache(void);
 extern int new_dentry_private_data(struct dentry *dentry);
 extern void free_dentry_private_data(struct dentry *dentry);
 extern struct dentry *sdcardfs_lookup(struct inode *dir, struct dentry *dentry,
-				    unsigned int flags);
+				unsigned int flags);
+extern struct inode *sdcardfs_iget(struct super_block *sb,
+				 struct inode *lower_inode);
 extern int sdcardfs_interpose(struct dentry *dentry, struct super_block *sb,
 			    struct path *lower_path);
 
@@ -179,7 +181,7 @@ struct sdcardfs_inode_info {
 	userid_t userid;
 	uid_t d_uid;
 	gid_t d_gid;
-	mode_t d_mode; 
+	mode_t d_mode;
 
 	struct inode vfs_inode;
 };
@@ -204,7 +206,7 @@ struct sdcardfs_mount_options {
 /* sdcardfs super-block data in memory */
 struct sdcardfs_sb_info {
 	struct super_block *lower_sb;
-	/* derived perm policy : some of options have been added 
+	/* derived perm policy : some of options have been added
 	 * to sdcardfs_mount_options (Android 4.4 support) */
 	struct sdcardfs_mount_options options;
 	spinlock_t lock;	/* protects obbpath */
@@ -277,7 +279,7 @@ static inline void pathcpy(struct path *dst, const struct path *src)
 }
 
 /* sdcardfs_get_pname functions calls path_get()
- * therefore, the caller must call "proper" path_put functions 
+ * therefore, the caller must call "proper" path_put functions
  */
 #define SDCARDFS_DENT_FUNC(pname) \
 static inline void sdcardfs_get_##pname(const struct dentry *dent, \
@@ -324,10 +326,10 @@ static inline void sdcardfs_put_reset_##pname(const struct dentry *dent) \
 	} else \
 		spin_unlock(&SDCARDFS_D(dent)->lock); \
 	return; \
-} 
+}
 
-SDCARDFS_DENT_FUNC(lower_path) 
-SDCARDFS_DENT_FUNC(orig_path)  
+SDCARDFS_DENT_FUNC(lower_path)
+SDCARDFS_DENT_FUNC(orig_path)
 
 static inline void sdcardfs_copy_lower_path(const struct dentry *dent,
 					struct path *lower_path)
@@ -414,7 +416,6 @@ static inline int prepare_dir(const char *path_s, uid_t uid, gid_t gid, mode_t m
 	struct iattr attrs;
 	
 	dent = kern_path_create(AT_FDCWD, path_s, &path, LOOKUP_DIRECTORY);
-	
 	if (IS_ERR(dent)) {
 		err = PTR_ERR(dent);
 		if (err == -EEXIST)
@@ -468,29 +469,29 @@ static inline int check_min_free_space(struct dentry *dentry, size_t size, int d
 		sdcardfs_get_lower_path(dentry, &lower_path);
 		err = vfs_statfs(&lower_path, &statfs);
 		sdcardfs_put_lower_path(dentry, &lower_path);
-	
+
 		if (unlikely(err))
 			return 0;
-	
+
 		/* Invalid statfs informations. */
 		if (unlikely(statfs.f_bsize == 0))
 			return 0;
-	
+
 		/* if you are checking directory, set size to f_bsize. */
 		if (unlikely(dir))
 			size = statfs.f_bsize;
-	
+
 		/* available size */
 		avail = statfs.f_bavail * statfs.f_bsize;
-	
+
 		/* not enough space */
 		if ((u64)size > avail)
 			return 0;
-	
+
 		/* enough space */
 		if ((avail - size) > (sbi->options.reserved_mb * 1024 * 1024))
 			return 1;
-	
+
 		return 0;
 	} else
 		return 1;

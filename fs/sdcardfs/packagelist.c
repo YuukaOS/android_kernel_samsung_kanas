@@ -29,8 +29,8 @@
 #define STRING_BUF_SIZE		(512)
 
 struct hashtable_entry {
-        struct hlist_node hlist;
-        void *key;
+	struct hlist_node hlist;
+	void *key;
 	int value;
 };
 
@@ -67,11 +67,12 @@ static unsigned int str_hash(void *key) {
 }
 
 static int contain_appid_key(struct packagelist_data *pkgl_dat, void *appid) {
-        struct hashtable_entry *hash_cur;
+	struct hashtable_entry *hash_cur;
 
-        hash_for_each_possible(pkgl_dat->appid_with_rw,	hash_cur, hlist, (unsigned int)appid)
-                if (appid == hash_cur->key)
-                        return 1;
+	hash_for_each_possible(pkgl_dat->appid_with_rw, hash_cur, hlist, (unsigned int)appid)
+
+		if (appid == hash_cur->key)
+			return 1;
 	return 0;
 }
 
@@ -202,7 +203,8 @@ static int insert_int_to_null(struct packagelist_data *pkgl_dat, void *key, int 
 	struct hashtable_entry *new_entry;
 
 	//printk(KERN_INFO "sdcardfs: %s: %d: %d\n", __func__, (int)key, value);
-	hash_for_each_possible(pkgl_dat->appid_with_rw,	hash_cur, hlist, (unsigned int)key) {
+	hash_for_each_possible(pkgl_dat->appid_with_rw,	hash_cur, hlist,
+					(unsigned int)key) {
 		if (key == hash_cur->key) {
 			hash_cur->value = value;
 			return 0;
@@ -232,7 +234,7 @@ static void remove_all_hashentrys(struct packagelist_data *pkgl_dat)
 	hash_for_each_safe(pkgl_dat->package_to_appid, i, h_t, hash_cur, hlist)
 		remove_str_to_int(hash_cur);
 	hash_for_each_safe(pkgl_dat->appid_with_rw, i, h_t, hash_cur, hlist)
-                remove_int_to_null(hash_cur);
+		remove_int_to_null(hash_cur);
 
 	hash_init(pkgl_dat->package_to_appid);
 	hash_init(pkgl_dat->appid_with_rw);
