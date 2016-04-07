@@ -1,5 +1,7 @@
 This is Linux kernel release 3.x <http://kernel.org/>
 
+If you want to try this kernel download this but have some bug. CPU clock max stuck on 1000 MHz but in this source I am done fix it. LINK : https://www.androidfilehost.com/?fid=24459283995307287
+
 This kernel have some changes :
 	1. Overclock upto 1.3 GHz
 	2. Underclock updown 200 MHz
