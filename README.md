@@ -1,8 +1,7 @@
 This is Linux kernel release 3.x <http://kernel.org/>
 
 If you want to try the kernel go here :
-Blog SA 	:
-Thread XDA 	:
+Blog SA 	: https://sandroid-team.blogspot.co.id/2016/09/custom-kernel-sandroid-untuk-samsung.html 
 
 This kernel have some changes read the feature.txt
 
