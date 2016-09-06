@@ -112,22 +112,22 @@ static void set_mcu_clk_freq(u32 mcu_freq)
 			break;
 	}
 	pr_debug("%s --- before, AHB_ARM_CLK: %08x, rate = %d, div = %d\n",
-		__func__, __raw_readl(REG_AHB_ARM_CLK), rate, arm_clk_div);
+		__func__, __raw_readl((void __iomem *)REG_AHB_ARM_CLK), rate, arm_clk_div);
 
-	gr_gen1 =  __raw_readl(GR_GEN1);
+	gr_gen1 =  __raw_readl((void __iomem *)GR_GEN1);
 	gr_gen1 |= BIT(9);
-	__raw_writel(gr_gen1, GR_GEN1);
+	__raw_writel(gr_gen1, (void __iomem *)GR_GEN1);
 
-	val = __raw_readl(REG_AHB_ARM_CLK);
+	val = __raw_readl((void __iomem *)REG_AHB_ARM_CLK);
 	val &= 0xfffffff8;
 	val |= arm_clk_div;
-	__raw_writel(val, REG_AHB_ARM_CLK);
+	__raw_writel(val, (void __iomem *)REG_AHB_ARM_CLK);
 
 	gr_gen1 &= ~BIT(9);
-	__raw_writel(gr_gen1, GR_GEN1);
+	__raw_writel(gr_gen1, (void __iomem *)GR_GEN1);
 
 	pr_debug("%s --- after, AHB_ARM_CLK: %08x, rate = %d, div = %d\n",
-		__func__, __raw_readl(REG_AHB_ARM_CLK), rate, arm_clk_div);
+		__func__, __raw_readl((void __iomem *)REG_AHB_ARM_CLK), rate, arm_clk_div);
 
 	return;
 }
@@ -136,7 +136,7 @@ static unsigned int get_mcu_clk_freq(void)
 {
 	u32 mpll_refin, mpll_n, mpll_cfg = 0, rate, val;
 
-	mpll_cfg = __raw_readl(GR_MPLL_MN);
+	mpll_cfg = __raw_readl((void __iomem *)GR_MPLL_MN);
 
 	mpll_refin = (mpll_cfg >> GR_MPLL_REFIN_SHIFT) & GR_MPLL_REFIN_MASK;
 	switch(mpll_refin){
@@ -157,7 +157,7 @@ static unsigned int get_mcu_clk_freq(void)
 	rate = mpll_refin * mpll_n;
 
 	/*find div */
-	val = __raw_readl(REG_AHB_ARM_CLK) & 0x7;
+	val = __raw_readl((void __iomem *)REG_AHB_ARM_CLK) & 0x7;
 	val += 1;
 	return rate / val;
 }
@@ -165,19 +165,17 @@ static unsigned int get_mcu_clk_freq(void)
 
 static struct cpufreq_table_data sc8830_cpufreq_table_data_cs = {
 	.freq_tbl = {
-		{0, 1300000},
-		{1, 1200000},
-		{2, 1100000},
-		{3, 1000000},
-		{4, SHARK_TDPLL_FREQUENCY},
-		{5, 600000},
-		{6, 500000},
-		{7, 400000},
-		{8, 200000},
-		{9, CPUFREQ_TABLE_END},
+		{0, 1200000},
+		{1, 1100000},
+		{2, 1000000},
+		{3, SHARK_TDPLL_FREQUENCY},
+		{4, 600000},
+		{5, 500000},
+		{6, 400000},
+		{7, 200000},
+		{8, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1350000,		
 		1300000,
 		1250000,
 		1200000,
@@ -193,6 +191,7 @@ static struct cpufreq_table_data sc8830_cpufreq_table_data_cs = {
 /*
 for 7715 test
 */
+#if 0
 static struct cpufreq_table_data sc7715_cpufreq_table_data = {
 	.freq_tbl = {
 		{0, 1000000},
@@ -209,31 +208,18 @@ static struct cpufreq_table_data sc7715_cpufreq_table_data = {
 		1000000,
 	},
 };
+#endif
 
 
 static struct cpufreq_table_data sc8830_cpufreq_table_data_es = {
 	.freq_tbl = {
-		{0, 1300000},
-		{1, 1200000},
-		{2, 1100000},
-		{3, 1000000},
-		{4, SHARK_TDPLL_FREQUENCY},
-		{5, 600000},
-		{6, 500000},
-		{7, 400000},
-		{8, 200000},
-		{9, CPUFREQ_TABLE_END},
+		{0, 1000000},
+		{1, SHARK_TDPLL_FREQUENCY},
+		{2, CPUFREQ_TABLE_END},
 	},
 	.vddarm_mv = {
-		1350000,		
-		1300000,
 		1250000,
 		1200000,
-		1150000,
-		1100000,
-		1125000,
-		1050000,
-		1025000,
 		1000000,
 	},
 };
@@ -462,8 +448,6 @@ static int sprd_cpufreq_target(struct cpufreq_policy *policy,
 	struct cpufreq_frequency_table *table;
 	int max_freq = cpufreq_max_limit;
 	int min_freq = cpufreq_min_limit;
-	int cur_freq = 0;
-	unsigned long irq_flags;
 
 	/* delay 30s to enable dvfs&dynamic-hotplug,
          * except requirment from termal-cooling device
@@ -685,7 +669,7 @@ static ssize_t cpufreq_voltage_store(struct device *dev, struct device_attribute
 	err = strict_strtoul(buf, 10, &value);
 	if (err)
 		return err;
-	printk("%s value=%u\n", __func__, value);
+	printk("%s value=%lu\n", __func__, value);
 	regulator_set_voltage(sprd_cpufreq_conf->regulator, (value * 1000), (value * 1000));
 	return count;
 }
@@ -697,7 +681,7 @@ static ssize_t cpufreq_frequency_store(struct device *dev, struct device_attribu
 	err = strict_strtoul(buf, 10, &value);
 	if (err)
 		return err;
-	printk("%s value=%u\n", __func__, value);
+	printk("%s value=%lu\n", __func__, value);
 	cpufreq_set_clock(value);
 	return count;
 }
@@ -706,7 +690,6 @@ static ssize_t dvfs_score_store(struct device *dev, struct device_attribute *att
 {
 	int ret;
 	int value;
-	unsigned long irq_flags;
 
 	ret = strict_strtoul(buf,16,(long unsigned int *)&value);
 
@@ -749,7 +732,6 @@ static ssize_t dvfs_unplug_store(struct device *dev, struct device_attribute *at
 {
 	int ret;
 	int value;
-	unsigned long irq_flags;
 
 	ret = strict_strtoul(buf,16,(long unsigned int *)&value);
 
@@ -784,7 +766,6 @@ static ssize_t dvfs_plug_store(struct device *dev, struct device_attribute *attr
 {
 	int ret;
 	int value;
-	unsigned long irq_flags;
 
 	ret = strict_strtoul(buf,16,(long unsigned int *)&value);
 

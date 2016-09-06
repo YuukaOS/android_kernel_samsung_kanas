@@ -50,7 +50,7 @@
 #define OOM_COUNT_READ
 #endif
 #ifdef LMK_COUNT_READ
-static uint32_t lmkcount = 0;
+static uint32_t lmkcount = 1;
 #endif
 
 #ifdef CONFIG_SEC_OOM_KILLER
@@ -274,6 +274,7 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 		else if (!zone_watermark_ok_safe(preferred_zone, 0, min_wmark_pages(preferred_zone)  + zone_wmark_ok_safe_gap, 0, 0))
 		{
 			zram_score_adj =  (min_score_adj + zram_score_adj)/2;
+
 		}
 		else
 		{

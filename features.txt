@@ -1,0 +1,67 @@
+SANDROID KERNEL FEATURES :
+==========================
+	
+	===============================
+	SANDROID KERNEL v1.2 02-09-2016
+	===============================
+		* Compiled use SaberMod Toolchain gcc 4.7.4
+		* I/O Scheduler
+			- BFQ
+			- CFQ
+			- DEADLINE
+			- FIOPS
+			- NOOP
+			- VR
+			- ZEN
+
+		* CPU Governor
+			- Conservative
+			- Interactive
+			- Ondemand
+			- Performance
+			- Powersave
+			- Sprdemand
+			- Userspace
+
+		* CPU
+			- Try add OC 1.3Ghz and UC 200MHz
+			- Fix CPU clock stuck at max clock.(In stockrom need turn on powersave in quicksetting toggle)
+
+		* Memory
+			- Support Low Memory Killer
+			- zRAM set to 200mb
+
+		* Other
+			- Support for Dynamic-FSync
+			- USB fast charge
+			- Support power suspend (Mode and State)
+			- HID Keyboard + Keyboard
+
+
+	===============================
+	SANDROID KERNEL v1.3 05-09-2016
+	===============================
+		* Same with v1.2 with some new added
+		* I/O Scheduler
+			+ FIFO
+			+ TRIPNDROID
+			+ SIO
+
+		* Memory
+			+ Kernel Samepage Merging
+
+		* CPU
+			+ Support for Fast-IDLING of CPU
+			+ Remove OC and use max clock 1.2GHz
+
+		* Battery
+			+ Support for the new PowerSuspend algorithm
+			
+		* Other
+			+ Support for CRC-Toggle
+			+ Optimized Console FrameBuffer for upto 70% increase in Performance
+			+ Optimized Integer SQRT. for upto 3x faster operation
+			+ Reduced Kernel Log Buffer to minimum
+			+ Enable all TCP congestions
+
+
