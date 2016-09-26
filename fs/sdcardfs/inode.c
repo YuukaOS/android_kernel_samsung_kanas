@@ -287,6 +287,7 @@ static int sdcardfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode
 	copied_fs = copy_fs_struct(current->fs);
 	if (!copied_fs) {
 		err = -ENOMEM;
+		unlock_dir(lower_parent_dentry);
 		goto out_unlock;
 	}
 	current->fs = copied_fs;
