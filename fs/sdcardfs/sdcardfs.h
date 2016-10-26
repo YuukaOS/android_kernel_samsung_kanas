@@ -474,43 +474,38 @@ static inline int prepare_dir(const char *path_s, uid_t uid, gid_t gid, mode_t m
 {
 	int err;
 	struct dentry *dent;
-	struct path path;
 	struct iattr attrs;
-	
-	dent = kern_path_create(AT_FDCWD, path_s, &path, LOOKUP_DIRECTORY);
+	struct path parent;
+
+	dent = kern_path_locked(path_s, &parent);
 	if (IS_ERR(dent)) {
 		err = PTR_ERR(dent);
 		if (err == -EEXIST)
 			err = 0;
-		return err;
+		goto out_unlock;
 	}
-	
-	err = mnt_want_write(path.mnt);
-	if (err) 
-		goto out;
-	
-	err = vfs_mkdir(path.dentry->d_inode, dent, mode);
+
+	err = vfs_mkdir2(parent.mnt, parent.dentry->d_inode, dent, mode);
 	if (err) {
 		if (err == -EEXIST)
 			err = 0;
-		goto out_drop;
+		goto out_dput;
 	}
-	
-	attrs.ia_uid = uid; 
-	attrs.ia_gid = gid; 
+
+	attrs.ia_uid = uid;
+	attrs.ia_gid = gid;
 	attrs.ia_valid = ATTR_UID | ATTR_GID;
 	mutex_lock(&dent->d_inode->i_mutex);
-	notify_change(dent, &attrs);
+	notify_change2(parent.mnt, dent, &attrs);
 	mutex_unlock(&dent->d_inode->i_mutex);
 
-out_drop:
-	mnt_drop_write(path.mnt);
-
-out: 
+out_dput:
 	dput(dent);
-	/* parent dentry locked by kern_path_create */
-	mutex_unlock(&path.dentry->d_inode->i_mutex);
-	path_put(&path);
+
+out_unlock:
+	/* parent dentry locked by lookup_create */
+	mutex_unlock(&parent.dentry->d_inode->i_mutex);
+	path_put(&parent);
 	return err;
 }
 
