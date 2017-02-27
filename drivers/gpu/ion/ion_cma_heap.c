@@ -70,12 +70,6 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 
 	dev_dbg(dev, "Request buffer allocation len %ld\n", len);
 
-	if (buffer->flags & ION_FLAG_CACHED)
-		return -EINVAL;
-
-	if (align > PAGE_SIZE)
-		return -EINVAL;
-
 	info = kzalloc(sizeof(struct ion_cma_buffer_info), GFP_KERNEL);
 	if (!info) {
 		dev_err(dev, "Can't allocate buffer info\n");
@@ -83,7 +77,7 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 	}
 
 	info->cpu_addr = dma_alloc_coherent(dev, len, &(info->handle),
-						GFP_HIGHUSER | __GFP_ZERO);
+						GFP_KERNEL);
 
 	if (!info->cpu_addr) {
 		dev_err(dev, "Fail to allocate buffer\n");
@@ -178,11 +172,6 @@ static void *ion_cma_map_kernel(struct ion_heap *heap,
 	return info->cpu_addr;
 }
 
-static void ion_cma_unmap_kernel(struct ion_heap *heap,
-					struct ion_buffer *buffer)
-{
-}
-
 static struct ion_heap_ops ion_cma_ops = {
 	.allocate = ion_cma_allocate,
 	.free = ion_cma_free,
@@ -191,7 +180,6 @@ static struct ion_heap_ops ion_cma_ops = {
 	.phys = ion_cma_phys,
 	.map_user = ion_cma_mmap,
 	.map_kernel = ion_cma_map_kernel,
-	.unmap_kernel = ion_cma_unmap_kernel,
 };
 
 struct ion_heap *ion_cma_heap_create(struct ion_platform_heap *data, struct device *dev)
