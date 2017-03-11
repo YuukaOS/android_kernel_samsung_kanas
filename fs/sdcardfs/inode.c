@@ -743,12 +743,8 @@ static int sdcardfs_setattr(struct vfsmount *mnt, struct dentry *dentry, struct 
 	if (!err) {
 		/* check the Android group ID */
 		parent = dget_parent(dentry);
-		if(!check_caller_access_to_name(parent->d_inode, &dentry->d_name)) {
-			printk(KERN_INFO "%s: need to check the caller's gid in packages.list\n"
-							 "  dentry: %s, task:%s\n",
-							 __func__, dentry->d_name.name, current->comm);
+		if(!check_caller_access_to_name(parent->d_inode, &dentry->d_name))
 			err = -EACCES;
-		}
 		dput(parent);
 	} 
 
@@ -857,9 +853,6 @@ static int sdcardfs_getattr(struct vfsmount *mnt, struct dentry *dentry,
 
 	parent = dget_parent(dentry);
 	if(!check_caller_access_to_name(parent->d_inode, &dentry->d_name)) {
-		printk(KERN_INFO "%s: need to check the caller's gid in packages.list\n"
-						 "  dentry: %s, task:%s\n",
-						 __func__, dentry->d_name.name, current->comm);
 		dput(parent);
 		return -EACCES;
 	}
