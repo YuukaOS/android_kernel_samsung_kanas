@@ -750,20 +750,15 @@ static unsigned int sd_unplug_avg_load11(int cpu, struct sd_dbs_tuners *sd_tunne
 
 /*
  * Every sampling_rate, we check, if current idle time is less than 20%
- * (default), then we try to increase frequency. Every sampling_rate, we look
- * for the lowest frequency which can sustain the load while keeping idle time
- * over 30%. If such a frequency exist, we try to decrease to this frequency.
- *
- * Any frequency increase takes it to the maximum frequency. Frequency reduction
- * happens at minimum steps of 5% (default) of current frequency
+ * (default), then we try to increase frequency. Else, we adjust the frequency
+ * proportional to load.
  */
-static void sd_check_cpu(int cpu, unsigned int load_freq)
+static void sd_check_cpu(int cpu, unsigned int load)
 {
 	struct od_cpu_dbs_info_s *dbs_info = &per_cpu(sd_cpu_dbs_info, cpu);
 	struct cpufreq_policy *policy;
 	struct dbs_data *dbs_data;
 	struct sd_dbs_tuners *sd_tuners;
-	unsigned int local_load = 0;
 	unsigned int itself_avg_load = 0;
 	struct unplug_work_info *puwi;
 	int cpu_num_limit = 0;
@@ -788,11 +783,8 @@ static void sd_check_cpu(int cpu, unsigned int load_freq)
 
 	dbs_info->freq_lo = 0;
 
-	local_load = load_freq/policy->cur;
-
-        pr_debug("[DVFS] load %d %x load_freq %d policy->cur %d\n",local_load,local_load,load_freq,policy->cur);
-	/* Check for frequency increase */
-	if (load_freq > sd_tuners->up_threshold * policy->cur) {
+    /* Check for frequency increase */
+	if (load > sd_tuners->up_threshold) {
 		/* If switching to max speed, apply sampling_down_factor */
 		if (policy->cur < policy->max)
 			dbs_info->rate_mult =
@@ -802,23 +794,10 @@ static void sd_check_cpu(int cpu, unsigned int load_freq)
 		else
 			dbs_freq_increase(policy, policy->max-1);
 		goto plug_check;
-	}
-
-	/* Check for frequency decrease */
-	/* if we cannot reduce the frequency anymore, break out early */
-	if (policy->cur == policy->min)
-		goto plug_check;
-
-	/*
-	 * The optimal frequency is the frequency that is the lowest that can
-	 * support the current CPU usage without triggering the up policy. To be
-	 * safe, we focus 3 points under the threshold.
-	 */
-	if (load_freq < sd_tuners->adj_up_threshold
-			* policy->cur) {
+	} else {
+        /* Calculate the next frequency proportional to load */
 		unsigned int freq_next;
-		freq_next = load_freq / sd_tuners->adj_up_threshold;
-
+		freq_next = load * policy->cpuinfo.max_freq / 100;
 		/* No longer fully busy, reset rate_mult */
 		dbs_info->rate_mult = 1;
 
@@ -852,7 +831,7 @@ plug_check:
 	}
 	else
 	{
-		cpu_score += cpu_evaluate_score(policy->cpu,sd_tuners, local_load);
+		cpu_score += cpu_evaluate_score(policy->cpu,sd_tuners, load);
 		if (cpu_score < 0)
 			cpu_score = 0;
 		if((cpu_score >= sd_tuners->cpu_score_up_threshold)
@@ -868,7 +847,7 @@ plug_check:
 	/* cpu unplug check */
 	puwi = &per_cpu(uwi, policy->cpu);
 	if((num_online_cpus() > 1) && (dvfs_unplug_select == 1)){
-		percpu_total_load[policy->cpu] += local_load;
+		percpu_total_load[policy->cpu] += load;
 		percpu_check_count[policy->cpu]++;
 		if(percpu_check_count[policy->cpu] == sd_tuners->cpu_down_count) {
 			/* calculate itself's average load */
@@ -894,7 +873,7 @@ plug_check:
 	else if(num_online_cpus() > 1 && (dvfs_unplug_select == 2))
 	{
 		/* calculate itself's average load */
-		itself_avg_load = sd_unplug_avg_load1(policy->cpu, sd_tuners, local_load);
+		itself_avg_load = sd_unplug_avg_load1(policy->cpu, sd_tuners, load);
 		pr_debug("check unplug: for cpu%u avg_load=%d\n", policy->cpu, itself_avg_load);
 
 		cpu_num_limit = max(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
@@ -922,7 +901,7 @@ plug_check:
 	else if(num_online_cpus() > 1 && (dvfs_unplug_select > 2))
 	{
 		/* calculate itself's average load */
-		itself_avg_load = sd_unplug_avg_load11(policy->cpu, sd_tuners, local_load);
+		itself_avg_load = sd_unplug_avg_load11(policy->cpu, sd_tuners, load);
 		pr_debug("check unplug: for cpu%u avg_load=%d\n", policy->cpu, itself_avg_load);
 
 		cpu_num_limit = max(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
@@ -1108,9 +1087,6 @@ static ssize_t store_up_threshold(struct dbs_data *dbs_data, const char *buf,
 			input < MIN_FREQUENCY_UP_THRESHOLD) {
 		return -EINVAL;
 	}
-	/* Calculate the new adj_up_threshold */
-	sd_tuners->adj_up_threshold += input;
-	sd_tuners->adj_up_threshold -= sd_tuners->up_threshold;
 
 	sd_tuners->up_threshold = input;
 	return count;
@@ -1597,8 +1573,6 @@ static int sd_init(struct dbs_data *dbs_data)
 	if (idle_time != -1ULL) {
 		/* Idle micro accounting is supported. Use finer thresholds */
 		tuners->up_threshold = MICRO_FREQUENCY_UP_THRESHOLD;
-		tuners->adj_up_threshold = MICRO_FREQUENCY_UP_THRESHOLD -
-			MICRO_FREQUENCY_DOWN_DIFFERENTIAL;
 		/*
 		 * In nohz/micro accounting case we set the minimum frequency
 		 * not depending on HZ, but fixed (very low). The deferred
@@ -1607,8 +1581,6 @@ static int sd_init(struct dbs_data *dbs_data)
 		dbs_data->min_sampling_rate = MICRO_FREQUENCY_MIN_SAMPLE_RATE;
 	} else {
 		tuners->up_threshold = DEF_FREQUENCY_UP_THRESHOLD;
-		tuners->adj_up_threshold = DEF_FREQUENCY_UP_THRESHOLD -
-			DEF_FREQUENCY_DOWN_DIFFERENTIAL;
 
 		/* For correct statistics, we need 10 ticks for each measure */
 		dbs_data->min_sampling_rate = MIN_SAMPLING_RATE_RATIO *
