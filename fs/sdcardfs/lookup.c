@@ -301,8 +301,8 @@ put_name:
 
 	/* no error: handle positive dentries */
 	if (!err) {
-		/* check if the dentry is an obb dentry  
-		 * if true, the lower_inode must be replaced with 
+		/* check if the dentry is an obb dentry
+		 * if true, the lower_inode must be replaced with
 		 * the inode of the graft path
 		 */
 
@@ -311,19 +311,19 @@ put_name:
 			/* setup_obb_dentry()
 			 * The lower_path will be stored to the dentry's orig_path
 			 * and the base obbpath will be copyed to the lower_path variable.
-			 * if an error returned, there's no change in the lower_path 
+			 * if an error returned, there's no change in the lower_path
 			 * returns: -ERRNO if error (0: no error)
 			 */
 			err = setup_obb_dentry(dentry, &lower_path);
 
 			if (err) {
 				/* if the sbi->obbpath is not available, we can optionally
-				 * setup the lower_path with its orig_path. 
+				 * setup the lower_path with its orig_path.
 				 * but, the current implementation just returns an error
-				 * because the sdcard daemon also regards this case as 
+				 * because the sdcard daemon also regards this case as
 				 * a lookup fail.
 				 */
-				printk(KERN_INFO "sdcardfs: base obbpath is not available\n"); 
+				pr_info("sdcardfs: base obbpath is not available\n");
 				sdcardfs_put_reset_orig_path(dentry);
 				goto out;
 			}
