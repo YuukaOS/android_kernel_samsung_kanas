@@ -530,6 +530,29 @@ config MACH_KANAS
 	bool "Kanas related changes"
 	default n
 
+config SC8830_OC
+	bool "Overclock frequencies from 1.2Ghz to 1.4ghz (EXPERIMENTAL)"
+	default n
+    help
+	 Increase the frequencies without increasing the corresponding voltages.
+	 The processor might generate more heat and become unstable.
+	 Even without increasing voltages, this may still cause increased battery
+	 usage.
+
+config SC8830_POWERSAVE
+	bool "Add another frequency scale (EXPERIMENTAL)"
+	default n
+    help
+	 This option will add another frequency to the cpufreq table (200Mhz)
+	 and sets its voltage to 0.875 V instead of 1.0 V thus enabling
+	 longer idle screen-on time, eg. reading a book.
+
+	 Due hardware constraints, scaling up from 200Mhz (0.875 V to  >= 1.0 V)
+	 will take a while, causing lags. This can be prevented by increasing the
+	 minimum frequency from 200Mhz but it also eliminates the powersaving
+	 gains since the cpu is under-volted to 0.875 V only when the frequency is
+	 200Mhz.
+
 config KANAS_GPS_AVDD18
 	bool "Kanas related regulator setting"
 	default n
