@@ -1437,11 +1437,7 @@ static long ion_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	}
 	case ION_IOC_INVALIDATE:
 	{
-		struct ion_fd_data data;
-		if (copy_from_user(&data, (void __user *)arg,
-				   sizeof(struct ion_fd_data)))
-			return -EFAULT;
-		ion_invalidate_for_cpu(client, data.fd);
+		ret = ion_invalidate_for_cpu(client, data.fd.fd);
 		break;
 	}
 	case ION_IOC_SYNC:
