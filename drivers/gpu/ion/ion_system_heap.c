@@ -27,11 +27,12 @@
 #include "ion_priv.h"
 
 static unsigned int high_order_gfp_flags = (GFP_HIGHUSER | __GFP_ZERO |
-					    __GFP_NOWARN | __GFP_NORETRY) &
+					    __GFP_NOWARN | __GFP_NORETRY |
+					    __GFP_NOMEMALLOC | __GFP_NO_KSWAPD) &
 					   ~__GFP_WAIT;
 static unsigned int low_order_gfp_flags  = (GFP_HIGHUSER | __GFP_ZERO |
 					 __GFP_NOWARN);
-static const unsigned int orders[] = {8, 4, 0};
+static const unsigned int orders[] = {8, 4, 2, 1, 0};
 static const int num_orders = ARRAY_SIZE(orders);
 static int order_to_index(unsigned int order)
 {
@@ -51,6 +52,7 @@ static unsigned int order_to_size(int order)
 struct ion_system_heap {
 	struct ion_heap heap;
 	struct ion_page_pool **pools;
+	unsigned int high_page_order;
 };
 
 struct page_info {
@@ -58,6 +60,11 @@ struct page_info {
 	unsigned int order;
 	struct list_head list;
 };
+static unsigned int default_high_page_order(void)
+{
+	//return (totalram_pages + ((1<<15)-1)) >> 15;
+	return 1;
+}
 
 static struct page *alloc_buffer_page(struct ion_system_heap *heap,
 				      struct ion_buffer *buffer,
@@ -72,7 +79,7 @@ static struct page *alloc_buffer_page(struct ion_system_heap *heap,
 	} else {
 		gfp_t gfp_flags = low_order_gfp_flags;
 
-		if (order > 4)
+		if (order >= heap->high_page_order)
 			gfp_flags = high_order_gfp_flags;
 		page = ion_heap_alloc_pages(buffer, gfp_flags, order);
 		if (!page)
@@ -184,7 +191,7 @@ static int ion_system_heap_allocate(struct ion_heap *heap,
 err1:
 	kfree(table);
 err:
-	list_for_each_entry(info, &pages, list) {
+	list_for_each_entry_safe(info, tmp_info, &pages, list) {
 		free_buffer_page(sys_heap, buffer, info->page, info->order);
 		kfree(info);
 	}
@@ -227,6 +234,33 @@ void ion_system_heap_unmap_dma(struct ion_heap *heap,
 	return;
 }
 
+#if defined(CONFIG_SPRD_IOMMU)
+int ion_system_heap_map_iommu(struct ion_buffer *buffer, int domain_num, unsigned long *ptr_iova)
+{
+	int ret=0;
+	if(0==buffer->iomap_cnt[domain_num])
+	{
+		buffer->iova[domain_num]=sprd_iova_alloc(domain_num,buffer->size);
+		ret = sprd_iova_map(domain_num,buffer->iova[domain_num],buffer);
+	}
+	*ptr_iova=buffer->iova[domain_num];
+	buffer->iomap_cnt[domain_num]++;
+	return ret;
+}
+int ion_system_heap_unmap_iommu(struct ion_buffer *buffer, int domain_num)
+{
+	int ret=0;
+	buffer->iomap_cnt[domain_num]--;
+	if(0==buffer->iomap_cnt[domain_num])
+	{
+		ret=sprd_iova_unmap(domain_num,buffer->iova[domain_num],buffer);
+		sprd_iova_free(domain_num,buffer->iova[domain_num],buffer->size);
+		buffer->iova[domain_num]=0;
+	}
+	return ret;
+}
+#endif
+
 static struct ion_heap_ops system_heap_ops = {
 	.allocate = ion_system_heap_allocate,
 	.free = ion_system_heap_free,
@@ -235,6 +269,10 @@ static struct ion_heap_ops system_heap_ops = {
 	.map_kernel = ion_heap_map_kernel,
 	.unmap_kernel = ion_heap_unmap_kernel,
 	.map_user = ion_heap_map_user,
+#if defined(CONFIG_SPRD_IOMMU)
+	.map_iommu = ion_system_heap_map_iommu,
+	.unmap_iommu = ion_system_heap_unmap_iommu,
+#endif
 };
 
 static int ion_system_heap_shrink(struct shrinker *shrinker,
@@ -312,6 +350,7 @@ struct ion_heap *ion_system_heap_create(struct ion_platform_heap *unused)
 	heap->heap.ops = &system_heap_ops;
 	heap->heap.type = ION_HEAP_TYPE_SYSTEM;
 	heap->heap.flags = ION_HEAP_FLAG_DEFER_FREE;
+	heap->high_page_order = default_high_page_order();
 	heap->pools = kzalloc(sizeof(struct ion_page_pool *) * num_orders,
 			      GFP_KERNEL);
 	if (!heap->pools)
@@ -320,7 +359,7 @@ struct ion_heap *ion_system_heap_create(struct ion_platform_heap *unused)
 		struct ion_page_pool *pool;
 		gfp_t gfp_flags = low_order_gfp_flags;
 
-		if (orders[i] > 4)
+		if (orders[i] >= heap->high_page_order)
 			gfp_flags = high_order_gfp_flags;
 		pool = ion_page_pool_create(gfp_flags, orders[i]);
 		if (!pool)
