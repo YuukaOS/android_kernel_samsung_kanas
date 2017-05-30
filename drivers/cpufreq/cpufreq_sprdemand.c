@@ -134,6 +134,7 @@ static int should_io_be_busy(void)
 }
 
 struct sd_dbs_tuners *g_sd_tuners = NULL;
+extern struct sd_dbs_tuners *_g_sd_tuners;
 
 /*
  * Find right freq to be set now with powersave_bias on.
@@ -258,7 +259,7 @@ static void sprd_unplug_one_cpu(struct work_struct *work)
 	}
 
 
-#if defined CONFIG_HOTPLUG_CPU && !defined SPRD_CPU_DYNAMIC_HOTPLUG
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (num_online_cpus() > 1) {
 		if (!sd_tuners->cpu_hotplug_disable) {
 			pr_info("!!  we gonna unplug cpu%d  !!\n", puwi->cpuid);
@@ -288,8 +289,7 @@ static void sprd_plugin_one_cpu(struct work_struct *work)
 		sd_tuners = dbs_data->tuners;
 	}
 
-
-#if defined CONFIG_HOTPLUG_CPU && !defined SPRD_CPU_DYNAMIC_HOTPLUG
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (num_online_cpus() < sd_tuners->cpu_num_limit) {
 		cpuid = cpumask_next_zero(0, cpu_online_mask);
 		if (!sd_tuners->cpu_hotplug_disable) {
@@ -1421,7 +1421,7 @@ static ssize_t store_cpu_hotplug_disable(struct dbs_data *dbs_data, const char *
 	/* plug-in all offline cpu mandatory if we didn't
 	 * enbale CPU_DYNAMIC_HOTPLUG
          */
-#if defined CONFIG_HOTPLUG_CPU && !defined SPRD_CPU_DYNAMIC_HOTPLUG
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (sd_tuners->cpu_hotplug_disable) {
 		for_each_cpu(cpu, cpu_possible_mask) {
 			if (!cpu_online(cpu))
@@ -1555,63 +1555,68 @@ static struct attribute_group sd_attr_group_gov_pol = {
 
 static int sd_init(struct dbs_data *dbs_data)
 {
-	struct sd_dbs_tuners *tuners;
+	struct sd_dbs_tuners *tuners = g_sd_tuners;
 	u64 idle_time;
 	int cpu, i;
 	struct unplug_work_info *puwi;
 
-	tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
-
-	if (!tuners) {
-		pr_err("%s: kzalloc failed\n", __func__);
-		return -ENOMEM;
-	}
-
-	cpu = get_cpu();
-	idle_time = get_cpu_idle_time_us(cpu, NULL);
-	put_cpu();
-	if (idle_time != -1ULL) {
-		/* Idle micro accounting is supported. Use finer thresholds */
-		tuners->up_threshold = MICRO_FREQUENCY_UP_THRESHOLD;
-		/*
-		 * In nohz/micro accounting case we set the minimum frequency
-		 * not depending on HZ, but fixed (very low). The deferred
-		 * timer might skip some samples if idle/sleeping as needed.
-		*/
-		dbs_data->min_sampling_rate = MICRO_FREQUENCY_MIN_SAMPLE_RATE;
+	if (!_g_sd_tuners) {
+		tuners = _g_sd_tuners;
 	} else {
-		tuners->up_threshold = DEF_FREQUENCY_UP_THRESHOLD;
+		tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
+		_g_sd_tuners = tuners;
 
-		/* For correct statistics, we need 10 ticks for each measure */
-		dbs_data->min_sampling_rate = MIN_SAMPLING_RATE_RATIO *
-			jiffies_to_usecs(10);
+		if (!tuners) {
+			pr_err("%s: kzalloc failed\n", __func__);
+			return -ENOMEM;
+		}
+
+		cpu = get_cpu();
+		idle_time = get_cpu_idle_time_us(cpu, NULL);
+		put_cpu();
+		if (idle_time != -1ULL) {
+			/* Idle micro accounting is supported. Use finer thresholds */
+			tuners->up_threshold = MICRO_FREQUENCY_UP_THRESHOLD;
+			/*
+			* In nohz/micro accounting case we set the minimum frequency
+			* not depending on HZ, but fixed (very low). The deferred
+			* timer might skip some samples if idle/sleeping as needed.
+			*/
+			dbs_data->min_sampling_rate = MICRO_FREQUENCY_MIN_SAMPLE_RATE;
+		} else {
+			tuners->up_threshold = DEF_FREQUENCY_UP_THRESHOLD;
+
+			/* For correct statistics, we need 10 ticks for each measure */
+			dbs_data->min_sampling_rate = MIN_SAMPLING_RATE_RATIO *
+				jiffies_to_usecs(10);
+		}
+
+		tuners->sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR;
+		tuners->ignore_nice = 0;
+		tuners->powersave_bias = 0;
+		tuners->io_is_busy = should_io_be_busy();
+
+		tuners->cpu_hotplug_disable = true;
+		tuners->is_suspend = false;
+		tuners->cpu_score_up_threshold = DEF_CPU_SCORE_UP_THRESHOLD;
+		tuners->load_critical = LOAD_CRITICAL;
+		tuners->load_hi = LOAD_HI;
+		tuners->load_mid = LOAD_MID;
+		tuners->load_light = LOAD_LIGHT;
+		tuners->load_lo = LOAD_LO;
+		tuners->load_critical_score = LOAD_CRITICAL_SCORE;
+		tuners->load_hi_score = LOAD_HI_SCORE;
+		tuners->load_mid_score = LOAD_MID_SCORE;
+		tuners->load_light_score = LOAD_LIGHT_SCORE;
+		tuners->load_lo_score = LOAD_LO_SCORE;
+		tuners->cpu_down_threshold = DEF_CPU_LOAD_DOWN_THRESHOLD;
+		tuners->cpu_down_count = DEF_CPU_DOWN_COUNT;
+		tuners->cpu_num_limit = nr_cpu_ids;
+		tuners->cpu_num_min_limit = 1;
+
+		if (tuners->cpu_num_limit > 1)
+			tuners->cpu_hotplug_disable = false;
 	}
-
-	tuners->sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR;
-	tuners->ignore_nice = 0;
-	tuners->powersave_bias = 0;
-	tuners->io_is_busy = should_io_be_busy();
-
-	tuners->cpu_hotplug_disable = true;
-	tuners->is_suspend = false;
-	tuners->cpu_score_up_threshold = DEF_CPU_SCORE_UP_THRESHOLD;
-	tuners->load_critical = LOAD_CRITICAL;
-	tuners->load_hi = LOAD_HI;
-	tuners->load_mid = LOAD_MID;
-	tuners->load_light = LOAD_LIGHT;
-	tuners->load_lo = LOAD_LO;
-	tuners->load_critical_score = LOAD_CRITICAL_SCORE;
-	tuners->load_hi_score = LOAD_HI_SCORE;
-	tuners->load_mid_score = LOAD_MID_SCORE;
-	tuners->load_light_score = LOAD_LIGHT_SCORE;
-	tuners->load_lo_score = LOAD_LO_SCORE;
-	tuners->cpu_down_threshold = DEF_CPU_LOAD_DOWN_THRESHOLD;
-	tuners->cpu_down_count = DEF_CPU_DOWN_COUNT;
-	tuners->cpu_num_limit = nr_cpu_ids;
-	tuners->cpu_num_min_limit = 1;
-
-	if (tuners->cpu_num_limit > 1)
-		tuners->cpu_hotplug_disable = false;
 
 	//memcpy(g_sd_tuners,tuners,sizeof(struct sd_dbs_tuners));
 	g_sd_tuners = tuners;
@@ -1632,8 +1637,12 @@ static int sd_init(struct dbs_data *dbs_data)
 
 static void sd_exit(struct dbs_data *dbs_data)
 {
+	/* cpuhotplug driver uses g_sd_tuners variable so don't free it*/
 	g_sd_tuners = NULL;
+	dbs_data->tuners = NULL;
+#if 0 
 	kfree(dbs_data->tuners);
+#endif
 }
 
 define_get_cpu_dbs_routines(sd_cpu_dbs_info);
@@ -1723,7 +1732,7 @@ static int set_cur_state(struct thermal_cooling_device *cdev,
 				sd_tuners->cpu_hotplug_disable = true;
 		dbs_freq_increase(policy, policy->max-1);
 		/* unplug all online cpu except cpu0 mandatory */
-#if defined CONFIG_HOTPLUG_CPU && !defined SPRD_CPU_DYNAMIC_HOTPLUG
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 		for_each_online_cpu(cpu) {
 			if (cpu)
 				{
@@ -1739,7 +1748,7 @@ static int set_cur_state(struct thermal_cooling_device *cdev,
 		/* plug-in all offline cpu mandatory if we didn't
 		  * enbale CPU_DYNAMIC_HOTPLUG
 		 */
-#if defined CONFIG_HOTPLUG_CPU && !defined SPRD_CPU_DYNAMIC_HOTPLUG
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 		for_each_cpu(cpu, cpu_possible_mask) {
 			if (!cpu_online(cpu))
 				{
@@ -1813,14 +1822,13 @@ static void sprdemand_gov_late_resume(struct early_suspend *h)
 	{
 		pr_info("sprdemand_gov_late_resume governor %s return\n", policy->governor->name);
 		if (g_sd_tuners == NULL)
-			return ;
+			return;
 		sd_tuners = g_sd_tuners;
 	}
 	else
 	{
 		sd_tuners = dbs_data->tuners;
 	}
-
 
 	if (sd_tuners->cpu_num_limit > 1)
 		if(cpu_hotplug_disable_set == false)

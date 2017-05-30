@@ -21,7 +21,9 @@
 
 #include <linux/kthread.h>
 
-#define CPU_HOTPLUG_DISABLE_WQ
+#include "../cpufreq/cpufreq_governor.h"
+
+// #define CPU_HOTPLUG_DISABLE_WQ
 #ifdef CPU_HOTPLUG_DISABLE_WQ
 #define HOTPLUG_DISABLE_ACTION_NONE     0
 #define HOTPLUG_DISABLE_ACTION_ACTIVE   1
@@ -34,7 +36,8 @@ static atomic_t hotplug_disable_state = ATOMIC_INIT(HOTPLUG_DISABLE_ACTION_NONE)
 static struct kobject hotplug_kobj;
 static struct task_struct *ksprd_hotplug;
 static struct sd_dbs_tuners *g_sd_tuners = NULL;
-static unsigned int boot_done;
+struct sd_dbs_tuners *_g_sd_tuners = NULL;
+static unsigned long boot_done;
 
 static struct delayed_work plugin_work;
 static struct delayed_work unplug_work;
@@ -72,39 +75,12 @@ u64 g_prev_cpu_idle[4] = {0};
 #define LOAD_LIGHT_SCORE -10
 #define LOAD_LO_SCORE -20
 
-static unsigned int percpu_load[4] = {0};
+extern unsigned int percpu_load[4];
 #define MAX_CPU_NUM  (4)
 #define MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE  (8)
 #define MAX_PLUG_AVG_LOAD_SIZE (2)
 
-
-struct sd_dbs_tuners {                                                                                   
-        unsigned int ignore_nice;                                                                        
-        unsigned int sampling_rate;                                                                      
-        unsigned int sampling_down_factor;                                                               
-        unsigned int up_threshold;                                                                       
-        unsigned int adj_up_threshold;                                                                   
-        unsigned int powersave_bias;                                                                     
-        unsigned int io_is_busy;                                                                         
-                                                                                                         
-        unsigned int cpu_hotplug_disable;                                                                
-        unsigned int is_suspend;                                                                         
-        unsigned int cpu_score_up_threshold;                                                             
-        unsigned int load_critical;                                                                      
-        unsigned int load_hi;                                                                            
-        unsigned int load_mid;                                                                           
-        unsigned int load_light;                                                                         
-        unsigned int load_lo;                                                                            
-        int load_critical_score;                                                                         
-        int load_hi_score;                                                                               
-        int load_mid_score;                                                                              
-        int load_light_score;                                                                            
-        int load_lo_score;                                                                               
-        unsigned int cpu_down_threshold;                                                                 
-        unsigned int cpu_down_count;                                                                     
-        unsigned int cpu_num_limit;                                                                      
-        unsigned int cpu_num_min_limit;                                                                  
-};                             
+static DEFINE_PER_CPU(struct od_cpu_dbs_info_s, sd_cpu_dbs_info);
 
 static unsigned int ga_percpu_total_load[MAX_CPU_NUM][MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE] = {{0}};
 
@@ -164,14 +140,15 @@ static unsigned int a_sub_windowsize[8][6] =
 
 static int cpu_score = 0;
 
-static unsigned int cpufreq_min_limit = ULONG_MAX;
-static unsigned int cpufreq_max_limit = 0;
+// static unsigned int cpufreq_min_limit = ULONG_MAX;
+// static unsigned int cpufreq_max_limit = 0;
 static unsigned int dvfs_score_select = 4;
-static unsigned int dvfs_unplug_select = 3;
-static unsigned int dvfs_plug_select = 0;
-static unsigned int dvfs_score_hi[4] = {0};
-static unsigned int dvfs_score_mid[4] = {0};
-static unsigned int dvfs_score_critical[4] = {0};
+extern unsigned int dvfs_unplug_select;
+extern unsigned int dvfs_plug_select;
+extern unsigned int dvfs_score_select;
+extern unsigned int dvfs_score_hi[4];
+extern unsigned int dvfs_score_mid[4];
+extern unsigned int dvfs_score_critical[4];
 
 struct cpufreq_conf {
 	struct clk 					*clk;
@@ -188,44 +165,9 @@ static struct workqueue_struct *input_wq;
 
 static DEFINE_PER_CPU(struct work_struct, dbs_refresh_work);
 
-
-static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
-{
-	u64 idle_time;
-	u64 cur_wall_time;
-	u64 busy_time;
-
-	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
-
-	busy_time = kcpustat_cpu(cpu).cpustat[CPUTIME_USER];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
-
-	idle_time = cur_wall_time - busy_time;
-	if (wall)
-		*wall = cputime_to_usecs(cur_wall_time);
-
-	return cputime_to_usecs(idle_time);
-}
-
-static inline u64 get_cpu_idle_time(unsigned int cpu, u64 *wall, int io_busy)
-{
-	u64 idle_time = get_cpu_idle_time_us(cpu, io_busy ? wall : NULL);
-
-	if (idle_time == -1ULL)
-		return get_cpu_idle_time_jiffy(cpu, wall);
-	else if (!io_busy)
-		idle_time += get_cpu_iowait_time_us(cpu, wall);
-
-	return idle_time;
-}
-
 static void __cpuinit sprd_plugin_one_cpu_ss(struct work_struct *work)
 {
-	int cpuid;
+	int cpuid, ret = 0, i;
 
 #ifdef CONFIG_HOTPLUG_CPU
 #ifdef CPU_HOTPLUG_DISABLE_WQ
@@ -247,13 +189,18 @@ static void __cpuinit sprd_plugin_one_cpu_ss(struct work_struct *work)
 		cpuid = cpumask_next_zero(0, cpu_online_mask);
 		if (!g_sd_tuners->cpu_hotplug_disable) {
 			pr_info("!!  we gonna plugin cpu%d  !!\n", cpuid);
-			cpu_up(cpuid);
+			for (i = 0; i < 5; i++) {
+				ret = cpu_up(cpuid);
+				if (ret != -ENOSYS)
+					break;
+			}
 		}
 	}
 #endif
 	return;
 }
-static void sprd_unplug_one_cpu_ss()
+
+static void sprd_unplug_one_cpu_ss(struct work_struct *work)
 {
 	unsigned int cpuid = 0;
 
@@ -402,7 +349,7 @@ static unsigned int sd_unplug_avg_load11(int cpu, struct sd_dbs_tuners *sd_tunne
 	int avg_load = 0;
 	int cur_window_pos = 0;
 	int cur_window_pos_tail = 0;
-	int idx = 0;
+// 	int idx = 0;
 	/*
 	initialize the window size for the first time
 	cur_window_cnt[cpu] will be cleared when the core is unpluged
@@ -548,22 +495,19 @@ static int cpu_evaluate_score(int cpu, struct sd_dbs_tuners *sd_tunners , unsign
 	return score;
 }
 
-void sd_check_cpu_sprd(unsigned int load_freq)
+void sd_check_cpu_sprd(unsigned int load)
 {
-	unsigned int local_load = 0;
 	unsigned int itself_avg_load = 0;
-	struct unplug_work_info *puwi;
+// 	struct unplug_work_info *puwi;
 	int cpu_num_limit = 0;
+	
+	struct od_cpu_dbs_info_s *dbs_info = &per_cpu(sd_cpu_dbs_info, 0);
 
 	if(time_before(jiffies, boot_done))
 		return;
 
 	if(g_sd_tuners->cpu_hotplug_disable)
 		return;
-	
-	local_load = load_freq;
-
-	pr_debug("local_load %d %x\n",local_load,local_load);
 
 	/* cpu plugin check */
 	cpu_num_limit = min(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
@@ -572,13 +516,14 @@ void sd_check_cpu_sprd(unsigned int load_freq)
 		schedule_delayed_work_on(0, &plugin_work, 0);
 	}
 	else {
-		cpu_score += cpu_evaluate_score(0,g_sd_tuners, local_load);
+		cpu_score += cpu_evaluate_score(0,g_sd_tuners, load);
 
 		pr_debug("cpu_score %d %x\n",cpu_score,cpu_score);
 
 		if (cpu_score < 0)
 			cpu_score = 0;
-		if (cpu_score >= g_sd_tuners->cpu_score_up_threshold) {
+		if (cpu_score >= g_sd_tuners->cpu_score_up_threshold
+			 &&(num_online_cpus() < g_sd_tuners->cpu_num_limit)) {
 			pr_debug("cpu_score=%d, begin plugin cpu!\n", cpu_score);
 			cpu_score = 0;
 			schedule_delayed_work_on(0, &plugin_work, 0);
@@ -594,9 +539,11 @@ void sd_check_cpu_sprd(unsigned int load_freq)
 	if(num_online_cpus() > 1 && (dvfs_unplug_select == 2))
 	{
 		/* calculate itself's average load */
-		itself_avg_load = sd_unplug_avg_load1(0, g_sd_tuners, local_load);
+		itself_avg_load = sd_unplug_avg_load1(0, g_sd_tuners, load);
 		pr_debug("check unplug: for cpu%u avg_load=%d\n", 0, itself_avg_load);
-		if((num_online_cpus() > cpu_num_limit) || (itself_avg_load < g_sd_tuners->cpu_down_threshold))
+		if((num_online_cpus() > cpu_num_limit)
+			|| ((itself_avg_load < g_sd_tuners->cpu_down_threshold)
+				&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
 		{
 			pr_debug("cpu%u's avg_load=%d,begin unplug cpu\n",
 					0, itself_avg_load);
@@ -609,15 +556,41 @@ void sd_check_cpu_sprd(unsigned int load_freq)
 			sum_load[0] = 0;
 			memset(&ga_percpu_total_load[0][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
 			schedule_delayed_work_on(0, &unplug_work, 0);
+		}
+	}
+	else if(num_online_cpus() > 1 && (dvfs_unplug_select == 2))
+	{
+		/* calculate itself's average load */
+		itself_avg_load = sd_unplug_avg_load1(0, g_sd_tuners, load);
+		pr_debug("check unplug: for cpu%u avg_load=%d\n", 0, itself_avg_load);
 
+		cpu_num_limit = max(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
+
+		if((num_online_cpus() > cpu_num_limit) 
+			|| ((itself_avg_load < g_sd_tuners->cpu_down_threshold)
+				&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
+		{
+			pr_debug("cpu%u's avg_load=%d,begin unplug cpu\n",
+					0, itself_avg_load);
+			percpu_load[0] = 0;
+			cur_window_size[0] = 0;
+			cur_window_index[0] = 0;
+			cur_window_cnt[0] = 0;
+			prev_window_size[0] = 0;
+			first_window_flag[0] = 0;
+			sum_load[0] = 0;
+			memset(&ga_percpu_total_load[0][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
+			schedule_delayed_work_on(0, &unplug_work, 0);
 		}
 	}
 	else if(num_online_cpus() > 1 && (dvfs_unplug_select > 2))
 	{
 		/* calculate itself's average load */
-		itself_avg_load = sd_unplug_avg_load11(0, g_sd_tuners, local_load);
+		itself_avg_load = sd_unplug_avg_load11(0, g_sd_tuners, load);
 		pr_debug("check unplug: for cpu%u avg_load=%d\n", 0, itself_avg_load);
-		if((num_online_cpus() > cpu_num_limit) || (itself_avg_load < g_sd_tuners->cpu_down_threshold))
+		if((num_online_cpus() > cpu_num_limit) 
+			|| ((itself_avg_load < g_sd_tuners->cpu_down_threshold)
+				&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
 		{
 			pr_debug("cpu%u's avg_load=%d,begin unplug cpu\n",
 					0, itself_avg_load);
@@ -630,17 +603,16 @@ void sd_check_cpu_sprd(unsigned int load_freq)
 			sum_load[0] = 0;
 			memset(&ga_percpu_total_load[0][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
 			schedule_delayed_work_on(0, &unplug_work, 0);
-
 		}
 	}
 }
 
-void dbs_check_cpu_sprd()
+void dbs_check_cpu_sprd(void)
 {
 	unsigned int max_load = 0;
 	unsigned int j;
 
-	/* Get Absolute Load (in terms of freq for ondemand gov) */
+	/* Get Absolute Load */
 	for_each_cpu(j, cpu_online_mask) {
 		u64 cur_wall_time, cur_idle_time;
 		unsigned int idle_time, wall_time;
@@ -674,8 +646,8 @@ void dbs_check_cpu_sprd()
 
 		load = 100 * (wall_time - idle_time) / wall_time;
 
-		pr_debug("***[cpu %d]cur_idle_time %lld prev_cpu_idle %lld cur_wall_time %lld prev_cpu_wall %lld wall_time %ld idle_time %ld load %ld\n",
-			j,cur_idle_time,prev_cpu_idle,cur_wall_time,prev_cpu_wall,wall_time,idle_time,load);
+// 		pr_debug("***[cpu %d]cur_idle_time %lld prev_cpu_idle %lld cur_wall_time %lld prev_cpu_wall %lld wall_time %ld idle_time %ld load %ld\n",
+// 			j,cur_idle_time,prev_cpu_idle,cur_wall_time,prev_cpu_wall,wall_time,idle_time,load);
 
 		if (load > max_load)
 			max_load = load;
@@ -788,109 +760,6 @@ wait_for_boot_done :
 	return 0;
 }
 
-static ssize_t dvfs_score_store(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	int ret;
-	int value;
-
-	ret = strict_strtoul(buf,16,(long unsigned int *)&value);
-
-	printk(KERN_ERR"dvfs_score_input %x\n",value);
-
-	dvfs_score_select = (value >> 24) & 0x0f;
-	if(dvfs_score_select < 4)
-	{
-		dvfs_score_critical[dvfs_score_select] = (value >> 16) & 0xff;
-		dvfs_score_hi[dvfs_score_select] = (value >> 8) & 0xff;
-		dvfs_score_mid[dvfs_score_select] = value & 0xff;
-	}
-
-
-	return count;
-}
-
-static ssize_t dvfs_score_show(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	int ret = 0;
-
-	ret = snprintf(buf + ret,50,"dvfs_score_select %d\n",dvfs_score_select);
-	ret += snprintf(buf + ret,200,"dvfs_score_critical[1] = %d dvfs_score_hi[1] = %d dvfs_score_mid[1] = %d\n",dvfs_score_critical[1],dvfs_score_hi[1],dvfs_score_mid[1]);
-	ret += snprintf(buf + ret,200,"dvfs_score_critical[2] = %d dvfs_score_hi[2] = %d dvfs_score_mid[2] = %d\n",dvfs_score_critical[2],dvfs_score_hi[2],dvfs_score_mid[2]);
-	ret += snprintf(buf + ret,200,"dvfs_score_critical[3] = %d dvfs_score_hi[3] = %d dvfs_score_mid[3] = %d\n",dvfs_score_critical[3],dvfs_score_hi[3],dvfs_score_mid[3]);
-
-	ret += snprintf(buf + ret,200,"percpu_total_load[0] = %d,%d->%d\n",
-		percpu_load[0],ga_percpu_total_load[0][(cur_window_index[0] - 1 + MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE) % MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE],ga_percpu_total_load[0][cur_window_index[0]]);
-	ret += snprintf(buf + ret,200,"percpu_total_load[1] = %d,%d->%d\n",
-		percpu_load[1],ga_percpu_total_load[1][(cur_window_index[1] - 1 + MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE) % MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE],ga_percpu_total_load[1][cur_window_index[1]]);
-	ret += snprintf(buf + ret,200,"percpu_total_load[2] = %d,%d->%d\n",
-		percpu_load[2],ga_percpu_total_load[2][(cur_window_index[2] - 1 + MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE) % MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE],ga_percpu_total_load[2][cur_window_index[2]]);
-	ret += snprintf(buf + ret,200,"percpu_total_load[3] = %d,%d->%d\n",
-		percpu_load[3],ga_percpu_total_load[3][(cur_window_index[3] - 1 + MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE) % MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE],ga_percpu_total_load[3][cur_window_index[3]]);
-
-	return strlen(buf) + 1;
-}
-
-static ssize_t dvfs_unplug_store(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	int ret;
-	int value;
-
-	ret = strict_strtoul(buf,16,(long unsigned int *)&value);
-
-	printk(KERN_ERR"dvfs_score_input %x\n",value);
-
-	dvfs_unplug_select = (value >> 24) & 0x0f;
-	if(dvfs_unplug_select > 7)
-	{
-		cur_window_size[0]= (value >> 8) & 0xff;
-		cur_window_size[1]= (value >> 8) & 0xff;
-		cur_window_size[2]= (value >> 8) & 0xff;
-		cur_window_size[3]= (value >> 8) & 0xff;
-	}
-	return count;
-}
-
-static ssize_t dvfs_unplug_show(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	int ret = 0;
-
-	ret = snprintf(buf + ret,50,"dvfs_unplug_select %d\n",dvfs_unplug_select);
-	ret += snprintf(buf + ret,100,"cur_window_size[0] = %d\n",cur_window_size[0]);
-	ret += snprintf(buf + ret,100,"cur_window_size[1] = %d\n",cur_window_size[1]);
-	ret += snprintf(buf + ret,100,"cur_window_size[2] = %d\n",cur_window_size[2]);
-	ret += snprintf(buf + ret,100,"cur_window_size[3] = %d\n",cur_window_size[3]);
-
-	return strlen(buf) + 1;
-}
-
-
-static ssize_t dvfs_plug_store(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	int ret;
-	int value;
-
-	ret = strict_strtoul(buf,16,(long unsigned int *)&value);
-
-	printk(KERN_ERR"dvfs_plug_select %x\n",value);
-
-	dvfs_plug_select = (value ) & 0x0f;
-	return count;
-}
-
-static ssize_t dvfs_plug_show(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	int ret = 0;
-
-	ret = snprintf(buf + ret,50,"dvfs_plug_select %d\n",dvfs_plug_select);
-
-	return strlen(buf) + 1;
-}
-static ssize_t cpufreq_table_show(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	memcpy(buf,sprd_cpufreq_conf->freq_tbl,sizeof(* sprd_cpufreq_conf->freq_tbl));
-	return sizeof(* sprd_cpufreq_conf->freq_tbl);
-}
-
 static ssize_t store_io_is_busy(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
 {
 	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
@@ -928,9 +797,6 @@ static ssize_t store_up_threshold(struct device *dev, struct device_attribute *a
 			input < MIN_FREQUENCY_UP_THRESHOLD) {
 		return -EINVAL;
 	}
-	/* Calculate the new adj_up_threshold */
-	sd_tuners->adj_up_threshold += input;
-	sd_tuners->adj_up_threshold -= sd_tuners->up_threshold;
 
 	sd_tuners->up_threshold = input;
 	return count;
@@ -1094,8 +960,13 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 
 {
 	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
-	unsigned int input, cpu;
+	unsigned int input;
+#ifndef CPU_HOTPLUG_DISABLE_WQ
+	unsigned int cpu;
+	int i;
+#endif
 	int ret;
+
 	ret = sscanf(buf, "%u", &input);
 
 	if (ret != 1) {
@@ -1110,7 +981,7 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 
 	smp_wmb();
 	/* plug-in all offline cpu mandatory if we didn't
-	 * enbale CPU_DYNAMIC_HOTPLUG
+	 * enable CPU_DYNAMIC_HOTPLUG
          */
 #ifdef CONFIG_HOTPLUG_CPU
 	if (sd_tuners->cpu_hotplug_disable) {
@@ -1121,8 +992,12 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 		for_each_cpu(cpu, cpu_possible_mask) {
 			if (!cpu_online(cpu))
 				{
-				cpu_up(cpu);
-			  }
+					for (i = 0; i < 5; i++) {
+						ret = cpu_up(cpu);
+						if (ret != -ENOSYS)
+							break;
+					}
+				}
 		}
 #endif
 	}
@@ -1136,10 +1011,6 @@ static ssize_t show_cpu_hotplug_disable(struct device *dev, struct device_attrib
 	return strlen(buf) + 1;
 }
 
-static DEVICE_ATTR(cpufreq_table, 0440, cpufreq_table_show, NULL);
-static DEVICE_ATTR(dvfs_score, 0660, dvfs_score_show, dvfs_score_store);
-static DEVICE_ATTR(dvfs_unplug, 0660, dvfs_unplug_show, dvfs_unplug_store);
-static DEVICE_ATTR(dvfs_plug, 0660, dvfs_plug_show, dvfs_plug_store);
 static DEVICE_ATTR(io_is_busy, 0660,  show_io_is_busy,store_io_is_busy);
 static DEVICE_ATTR(up_threshold, 0660,  show_up_threshold,store_up_threshold);
 static DEVICE_ATTR(sampling_down_factor, 0660, show_sampling_down_factor,store_sampling_down_factor);
@@ -1152,10 +1023,6 @@ static DEVICE_ATTR(cpu_down_count, 0660, show_cpu_down_count,store_cpu_down_coun
 static DEVICE_ATTR(cpu_hotplug_disable, 0660, show_cpu_hotplug_disable,store_cpu_hotplug_disable);
 
 static struct attribute *g[] = {
-	&dev_attr_cpufreq_table.attr,
-	&dev_attr_dvfs_score.attr,
-	&dev_attr_dvfs_unplug.attr,
-	&dev_attr_dvfs_plug.attr,
 	&dev_attr_io_is_busy.attr,
 	&dev_attr_up_threshold.attr,
 	&dev_attr_sampling_down_factor.attr,
@@ -1264,17 +1131,21 @@ struct input_handler dbs_input_handler = {
 	.id_table	= dbs_ids,
 };
 
-static void __init sprd_hotplug_init(void)
+static int __init sprd_hotplug_init(void)
 {
 	int i;
 	int ret; 
 	
 	boot_done = jiffies + CPU_HOTPLUG_BOOT_DONE_TIME;
-	
-	g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
+
+	if (!_g_sd_tuners) {
+		g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
+		_g_sd_tuners = g_sd_tuners;
+	} else {
+		g_sd_tuners = _g_sd_tuners;
+	}
 	
 	sd_tuners_init(g_sd_tuners);
-
 
 	input_wq = alloc_workqueue("iewq", WQ_MEM_RECLAIM|WQ_SYSFS, 1);
 
@@ -1289,7 +1160,6 @@ static void __init sprd_hotplug_init(void)
 		INIT_WORK(&per_cpu(dbs_refresh_work, i), dbs_refresh_callback);
 	}
 
-	
 	ksprd_hotplug = kthread_create(sprd_hotplug,NULL,"sprd_hotplug");
 
 	wake_up_process(ksprd_hotplug);
@@ -1299,7 +1169,7 @@ static void __init sprd_hotplug_init(void)
 	if (ret) {
 		pr_err("%s: Failed to add kobject for hotplug\n", __func__);
 	}
-
+	return 0;
 }
 
 MODULE_AUTHOR("sprd");
