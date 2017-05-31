@@ -133,8 +133,7 @@ static int should_io_be_busy(void)
 	return 0;
 }
 
-struct sd_dbs_tuners *g_sd_tuners = NULL;
-extern struct sd_dbs_tuners *_g_sd_tuners;
+extern struct sd_dbs_tuners *g_sd_tuners;
 
 /*
  * Find right freq to be set now with powersave_bias on.
@@ -1560,11 +1559,10 @@ static int sd_init(struct dbs_data *dbs_data)
 	int cpu, i;
 	struct unplug_work_info *puwi;
 
-	if (!_g_sd_tuners) {
-		tuners = _g_sd_tuners;
+	if (!g_sd_tuners) {
+		tuners = g_sd_tuners;
 	} else {
 		tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
-		_g_sd_tuners = tuners;
 
 		if (!tuners) {
 			pr_err("%s: kzalloc failed\n", __func__);
@@ -1638,9 +1636,8 @@ static int sd_init(struct dbs_data *dbs_data)
 static void sd_exit(struct dbs_data *dbs_data)
 {
 	/* cpuhotplug driver uses g_sd_tuners variable so don't free it*/
-	g_sd_tuners = NULL;
-	dbs_data->tuners = NULL;
 #if 0 
+	g_sd_tuners = NULL;
 	kfree(dbs_data->tuners);
 #endif
 }
@@ -1815,9 +1812,11 @@ static void sprdemand_gov_early_suspend(struct early_suspend *h)
 static void sprdemand_gov_late_resume(struct early_suspend *h)
 {
 	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
-	struct dbs_data *dbs_data = policy->governor_data;
+/*	struct dbs_data *dbs_data = policy->governor_data; */
+	struct dbs_data *dbs_data = NULL;
 	struct sd_dbs_tuners *sd_tuners = NULL;
 
+	/* dbs_data is a traitor, we don't know is tuners is ours */
 	if(NULL == dbs_data)
 	{
 		pr_info("sprdemand_gov_late_resume governor %s return\n", policy->governor->name);
@@ -1825,10 +1824,11 @@ static void sprdemand_gov_late_resume(struct early_suspend *h)
 			return;
 		sd_tuners = g_sd_tuners;
 	}
-	else
+/*	else
 	{
 		sd_tuners = dbs_data->tuners;
-	}
+	} 
+*/
 
 	if (sd_tuners->cpu_num_limit > 1)
 		if(cpu_hotplug_disable_set == false)

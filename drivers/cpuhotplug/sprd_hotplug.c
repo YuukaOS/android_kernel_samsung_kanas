@@ -35,8 +35,7 @@ static atomic_t hotplug_disable_state = ATOMIC_INIT(HOTPLUG_DISABLE_ACTION_NONE)
 
 static struct kobject hotplug_kobj;
 static struct task_struct *ksprd_hotplug;
-static struct sd_dbs_tuners *g_sd_tuners = NULL;
-struct sd_dbs_tuners *_g_sd_tuners = NULL;
+extern struct sd_dbs_tuners *g_sd_tuners = NULL;
 static unsigned long boot_done;
 
 static struct delayed_work plugin_work;
@@ -1138,12 +1137,8 @@ static int __init sprd_hotplug_init(void)
 	
 	boot_done = jiffies + CPU_HOTPLUG_BOOT_DONE_TIME;
 
-	if (!_g_sd_tuners) {
+	if (!g_sd_tuners)
 		g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
-		_g_sd_tuners = g_sd_tuners;
-	} else {
-		g_sd_tuners = _g_sd_tuners;
-	}
 	
 	sd_tuners_init(g_sd_tuners);
 
