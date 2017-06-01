@@ -35,7 +35,7 @@ static atomic_t hotplug_disable_state = ATOMIC_INIT(HOTPLUG_DISABLE_ACTION_NONE)
 
 static struct kobject hotplug_kobj;
 static struct task_struct *ksprd_hotplug;
-extern struct sd_dbs_tuners *g_sd_tuners = NULL;
+extern struct sd_dbs_tuners *g_sd_tuners;
 static unsigned long boot_done;
 
 static struct delayed_work plugin_work;
@@ -141,7 +141,6 @@ static int cpu_score = 0;
 
 // static unsigned int cpufreq_min_limit = ULONG_MAX;
 // static unsigned int cpufreq_max_limit = 0;
-static unsigned int dvfs_score_select = 4;
 extern unsigned int dvfs_unplug_select;
 extern unsigned int dvfs_plug_select;
 extern unsigned int dvfs_score_select;
@@ -541,31 +540,6 @@ void sd_check_cpu_sprd(unsigned int load)
 		itself_avg_load = sd_unplug_avg_load1(0, g_sd_tuners, load);
 		pr_debug("check unplug: for cpu%u avg_load=%d\n", 0, itself_avg_load);
 		if((num_online_cpus() > cpu_num_limit)
-			|| ((itself_avg_load < g_sd_tuners->cpu_down_threshold)
-				&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
-		{
-			pr_debug("cpu%u's avg_load=%d,begin unplug cpu\n",
-					0, itself_avg_load);
-			percpu_load[0] = 0;
-			cur_window_size[0] = 0;
-			cur_window_index[0] = 0;
-			cur_window_cnt[0] = 0;
-			prev_window_size[0] = 0;
-			first_window_flag[0] = 0;
-			sum_load[0] = 0;
-			memset(&ga_percpu_total_load[0][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
-			schedule_delayed_work_on(0, &unplug_work, 0);
-		}
-	}
-	else if(num_online_cpus() > 1 && (dvfs_unplug_select == 2))
-	{
-		/* calculate itself's average load */
-		itself_avg_load = sd_unplug_avg_load1(0, g_sd_tuners, load);
-		pr_debug("check unplug: for cpu%u avg_load=%d\n", 0, itself_avg_load);
-
-		cpu_num_limit = max(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
-
-		if((num_online_cpus() > cpu_num_limit) 
 			|| ((itself_avg_load < g_sd_tuners->cpu_down_threshold)
 				&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
 		{

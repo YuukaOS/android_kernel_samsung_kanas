@@ -133,7 +133,7 @@ static int should_io_be_busy(void)
 	return 0;
 }
 
-extern struct sd_dbs_tuners *g_sd_tuners;
+struct sd_dbs_tuners *g_sd_tuners;
 
 /*
  * Find right freq to be set now with powersave_bias on.
