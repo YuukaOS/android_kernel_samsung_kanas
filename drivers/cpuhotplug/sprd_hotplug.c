@@ -305,102 +305,6 @@ wait_for_boot_done :
 	return 0;
 }
 
-static ssize_t store_io_is_busy(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
-	unsigned int input;
-	int ret;
-	unsigned int j;
-
-	ret = sscanf(buf, "%u", &input);
-	if (ret != 1)
-		return -EINVAL;
-	sd_tuners->io_is_busy = !!input;
-
-	/* we need to re-evaluate prev_cpu_idle */
-	for_each_online_cpu(j) {
-		g_prev_cpu_idle[j] = get_cpu_idle_time(j,
-				&g_prev_cpu_wall[j],should_io_be_busy());
-	}
-	return count;
-}
-
-static ssize_t show_io_is_busy(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	snprintf(buf,10,"%d\n",g_sd_tuners->io_is_busy);
-	return strlen(buf) + 1;
-}
-
-static ssize_t store_up_threshold(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1 || input > MAX_FREQUENCY_UP_THRESHOLD ||
-			input < MIN_FREQUENCY_UP_THRESHOLD) {
-		return -EINVAL;
-	}
-
-	sd_tuners->up_threshold = input;
-	return count;
-}
-
-static ssize_t show_up_threshold(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	snprintf(buf,10,"%d\n",g_sd_tuners->up_threshold);
-	return strlen(buf) + 1;
-}
-
-static ssize_t store_sampling_down_factor(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
-	unsigned int input;
-
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1 || input > MAX_SAMPLING_DOWN_FACTOR || input < 1)
-		return -EINVAL;
-	sd_tuners->sampling_down_factor = input;
-
-	return count;
-}
-
-static ssize_t show_sampling_down_factor(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	snprintf(buf,10,"%d\n",g_sd_tuners->sampling_down_factor);
-	return strlen(buf) + 1;
-}
-
-static ssize_t store_ignore_nice(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
-	unsigned int input;
-	int ret;
-
-	ret = sscanf(buf, "%u", &input);
-	if (ret != 1)
-		return -EINVAL;
-
-	if (input > 1)
-		input = 1;
-
-	if (input == sd_tuners->ignore_nice) { /* nothing to do */
-		return count;
-	}
-	sd_tuners->ignore_nice = input;
-
-	return count;
-}
-
-static ssize_t show_ignore_nice(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	snprintf(buf,10,"%d\n",g_sd_tuners->ignore_nice);
-	return strlen(buf) + 1;
-}
-
 static ssize_t store_cpu_num_limit(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
 {
 	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
@@ -481,26 +385,6 @@ static ssize_t show_cpu_down_threshold(struct device *dev, struct device_attribu
 	return strlen(buf) + 1;
 }
 
-static ssize_t store_cpu_down_count(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
-{
-	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
-	unsigned int input;
-	int ret;
-	ret = sscanf(buf, "%u", &input);
-
-	if (ret != 1) {
-		return -EINVAL;
-	}
-	sd_tuners->cpu_down_count = input;
-	return count;
-}
-
-static ssize_t show_cpu_down_count(struct device *dev, struct device_attribute *attr,char *buf)
-{
-	snprintf(buf,10,"%d\n",g_sd_tuners->cpu_down_count);
-	return strlen(buf) + 1;
-}
-
 static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
 
 {
@@ -556,27 +440,17 @@ static ssize_t show_cpu_hotplug_disable(struct device *dev, struct device_attrib
 	return strlen(buf) + 1;
 }
 
-static DEVICE_ATTR(io_is_busy, 0660,  show_io_is_busy,store_io_is_busy);
-static DEVICE_ATTR(up_threshold, 0660,  show_up_threshold,store_up_threshold);
-static DEVICE_ATTR(sampling_down_factor, 0660, show_sampling_down_factor,store_sampling_down_factor);
-static DEVICE_ATTR(ignore_nice, 0660, show_ignore_nice,store_ignore_nice);
 static DEVICE_ATTR(cpu_num_limit, 0660, show_cpu_num_limit,store_cpu_num_limit);
 static DEVICE_ATTR(cpu_num_min_limit, 0660, show_cpu_num_min_limit,store_cpu_num_min_limit);
 static DEVICE_ATTR(cpu_score_up_threshold, 0660, show_cpu_score_up_threshold,store_cpu_score_up_threshold);
 static DEVICE_ATTR(cpu_down_threshold, 0660, show_cpu_down_threshold,store_cpu_down_threshold);
-static DEVICE_ATTR(cpu_down_count, 0660, show_cpu_down_count,store_cpu_down_count);
 static DEVICE_ATTR(cpu_hotplug_disable, 0660, show_cpu_hotplug_disable,store_cpu_hotplug_disable);
 
 static struct attribute *g[] = {
-	&dev_attr_io_is_busy.attr,
-	&dev_attr_up_threshold.attr,
-	&dev_attr_sampling_down_factor.attr,
-	&dev_attr_ignore_nice.attr,
 	&dev_attr_cpu_num_limit.attr,
 	&dev_attr_cpu_num_min_limit.attr,
 	&dev_attr_cpu_score_up_threshold.attr,
 	&dev_attr_cpu_down_threshold.attr,
-	&dev_attr_cpu_down_count.attr,
 	&dev_attr_cpu_hotplug_disable.attr,
 	NULL,
 };
