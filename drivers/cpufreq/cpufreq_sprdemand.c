@@ -1993,9 +1993,9 @@ static int __init cpufreq_gov_dbs_init(void)
 	register_early_suspend(&sprdemand_gov_earlysuspend_handler);
 #endif
 
-	g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
+/*	g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
 
-/*	input_wq = alloc_workqueue("iewq", WQ_MEM_RECLAIM|WQ_SYSFS, 1);
+	input_wq = alloc_workqueue("iewq", WQ_MEM_RECLAIM|WQ_SYSFS, 1);
 
 	if (!input_wq)
 	{
