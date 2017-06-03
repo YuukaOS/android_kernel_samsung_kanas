@@ -1561,16 +1561,15 @@ int sd_tuners_init(struct sd_dbs_tuners *tuners)
 
 static int sd_init(struct dbs_data *dbs_data)
 {
-	struct sd_dbs_tuners *tuners = g_sd_tuners;
+	struct sd_dbs_tuners *tuners = NULL;
 	u64 idle_time;
 	int cpu, i, ret;
 	struct unplug_work_info *puwi;
 
-	if (!g_sd_tuners) {
+	if (g_sd_tuners != NULL) {
 		tuners = g_sd_tuners;
 	} else {
 		tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
-
 		ret = sd_tuners_init(tuners);
 		if (ret) {
 			return ret;
@@ -1767,9 +1766,11 @@ static int sprdemand_gov_pm_notifier_call(struct notifier_block *nb,
 	 * one to make sure all things go right */
 	if (event == PM_SUSPEND_PREPARE || event == PM_HIBERNATION_PREPARE) {
 		pr_info(" %s, recv pm suspend notify\n", __func__ );
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 		if (sd_tuners->cpu_num_limit > 1)
 			if(cpu_hotplug_disable_set == false)
 				sd_tuners->cpu_hotplug_disable = true;
+#endif
 		sd_tuners->is_suspend = true;
 		dbs_freq_increase(policy, policy->max);
 		pr_info(" %s, recv pm suspend notify done\n", __func__ );
@@ -1809,10 +1810,11 @@ static void sprdemand_gov_late_resume(struct early_suspend *h)
 		sd_tuners = dbs_data->tuners;
 	} 
 */
-
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (sd_tuners->cpu_num_limit > 1)
 		if(cpu_hotplug_disable_set == false)
 			sd_tuners->cpu_hotplug_disable = false;
+#endif
 	sd_tuners->is_suspend = false;
 
 	return;
