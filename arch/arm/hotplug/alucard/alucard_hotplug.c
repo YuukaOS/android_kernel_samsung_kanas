@@ -22,6 +22,11 @@
 #include <linux/mutex.h>
 #include <linux/module.h>
 #include <linux/slab.h>
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+#include <linux/hotplugger.h>
+#endif
+
 /*#ifndef CONFIG_CPU_EXYNOS4210
 #include "acpuclock.h"
 #endif*/
@@ -32,6 +37,10 @@ static struct mutex timer_mutex;
 static struct delayed_work alucard_hotplug_work;
 static struct work_struct alucard_hotplug_offline_work;
 static struct work_struct alucard_hotplug_online_work;
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+static struct hotplugger_driver hotplugger_handler;
+#endif
 
 struct hotplug_cpuinfo {
 	cputime64_t prev_cpu_wall;
@@ -212,6 +221,17 @@ show_one(cpu_up_rate, cpu_up_rate);
 show_one(cpu_down_rate, cpu_down_rate);
 show_one(maxcoreslimit, maxcoreslimit);
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+#undef is_enabled_func
+#define is_enabled_func(variable)		\
+static bool is_enabled (void)		\
+{									\
+	return (atomic_read(variable) > 0 ? true : false);	\
+}
+
+is_enabled_func(&hotplug_tuners_ins.hotplug_enable);
+#endif
+
 #define show_hotplug_param(file_name, num_core, up_down)		\
 static ssize_t show_##file_name##_##num_core##_##up_down		\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
@@ -319,13 +339,16 @@ define_one_global_rw(hotplug_rq_3_1);
 define_one_global_rw(hotplug_rq_4_0);
 #endif
 
-static void __ref cpus_hotplugging(bool state) {
+static int __ref cpus_hotplugging(bool state) {
 	unsigned int cpu=0;
 	int delay = 0;
 
 	mutex_lock(&timer_mutex);
 
 	if (state) {
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+		hotplugger_disable_conflicts(&hotplugger_handler);
+#endif
 		start_rq_work();
 		for_each_possible_cpu(cpu) {
 			per_cpu(od_hotplug_cpuinfo, cpu).prev_cpu_idle = get_cpu_idle_time_us(cpu, NULL);
@@ -349,6 +372,10 @@ static void __ref cpus_hotplugging(bool state) {
 	}
 
 	mutex_unlock(&timer_mutex);
+
+	atomic_set(&hotplug_tuners_ins.hotplug_enable, state);
+
+	return 0;
 }
 
 /**
@@ -434,8 +461,6 @@ static ssize_t store_hotplug_enable(struct kobject *a, struct attribute *b,
 		cpus_hotplugging(true);
 	else
 		cpus_hotplugging(false);
-
-	atomic_set(&hotplug_tuners_ins.hotplug_enable, input);
 
 	return count;
 }
@@ -706,6 +731,14 @@ int __init alucard_hotplug_init(void)
 	unsigned int cpu;
 	int ret;
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	hotplugger_handler = (struct hotplugger_driver)  {
+		.name="alucard_hotplug",
+		.change_state=&cpus_hotplugging,
+		.is_enabled=&is_enabled,
+	};
+#endif
+
 	ret = sysfs_create_group(kernel_kobj, &alucard_hotplug_attr_group);
 	if (ret) {
 		printk(KERN_ERR "failed at(%d)\n", __LINE__);
@@ -742,11 +775,17 @@ int __init alucard_hotplug_init(void)
 	INIT_WORK(&alucard_hotplug_offline_work, cpu_offline_work_fn);
 	schedule_delayed_work(&alucard_hotplug_work, delay);
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	hotplugger_register_driver(&hotplugger_handler);
+#endif
 	return ret;
 }
 
 static void __exit alucard_hotplug_exit(void)
 {
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	hotplugger_unregister_driver(&hotplugger_handler);
+#endif
 	cancel_delayed_work_sync(&alucard_hotplug_work);
 	cancel_work_sync(&alucard_hotplug_online_work);
 	cancel_work_sync(&alucard_hotplug_offline_work);
