@@ -1,0 +1,203 @@
+Naive cpu hotplugging modules interface
+By ME<enriquezmark36@gmail.com>
+
+Background and rationale:
+-------------------------
+I'd like to learn how to code in c.
+
+----------
+Interface:
+----------
+The implementation relies on struct hotplugger_driver which is defined by this
+
+struct hotplugger_driver {
+	char	name[DRIVER_NAME_LEN];
+	int	(*change_state)	(bool state);
+	bool	(*is_enabled)	(void);
+	char	**whitelist;
+	struct list_head	list;
+};
+
+where DRIVER_NAME_LEN is a char array with length 32.
+
+change_state is a function pointer in which this interface use to activate
+or deactivate modules. Note that it doesn't unload the modules only disables
+or enables them. Usually, change_state is implemented as wrapper to an
+"enabled" variable plus some housekeeping if the module relies threads or
+workqueues. May return a non-zero value on error.
+
+is_enabled is a function pointer whose only task is to check whether the
+module is running and doing its work. It returns either true or false.
+
+From this point, I'd like to make myself clear about what "activation" means.
+It just means starting the work the modules should be doing.
+
+The whitelist is an array of strings, a char array, and would
+be used to determine which modules would be disabled when a module is being
+activated.
+
+By default, the hotplugger_disable_conflicts() function would disable
+every running modules. The whitelist would prevent a running module from being
+disabled.
+
+The whitelist contains the set of modules' names which will be not be disabled
+while all modules not included will be disabled upon the module activation.
+No racism is intended.
+
+These lists should have NULL as its last element. This is a MUST.
+
+Should the whitelist be initialized to NULL, all running modules will be
+disabled upon that module's activation.
+
+When the whitelist is initialized to a {NULL} the list WOULD STILL BE PARSED
+but every running and registered module will be disabled just like the
+default behavior.
+
+--------------------
+Using the whitelist:
+--------------------
+
+If by chance you've to initialize your list in an init function,
+the list should NOT be allocated to stack like this.
+
+.whitelist=(char*[]){"another_name", NULL},
+
+Your list would be corrupted by the time the init function returns.
+As much as possible, use a list (const char* const [])
+with static storage life.
+
+You could write up something like this:
+
+static char *whitelist[] = {"another_name", NULL};
+
+put it in your init function or outside the functions as a
+global variable and set the whitelist to that:
+
+.whitelist=whitelist,
+
+---------------------
+Creating an instance:
+---------------------
+
+Remember to include the header hotplugger.h
+#include <linux/hotplugger.h>
+
+Here's an example using a whitelist
+
+static struct hotplugger_driver handler = {
+	.name = "module_name",
+	.change_state = &toggle,
+	.is_enabled = &enabled,
+	.whitelist = (char*[]){"another_name", "other_name", NULL},
+};
+
+Note: It is advisable to do the initialization of the struct
+      in the module_init function and keep a global variable
+      to prevent issues about implicit declarations and such.
+      something like this:
+.......somewhere at the top......
+static struct hotplugger_driver handler;
+...
+... some codes and functions
+...
+...some_module_init(...)
+{
+...
+	handler =  {
+		.name = "module_name",
+		.change_state = &toggle,
+		.is_enabled = &enabled,
+	};
+...
+
+After you've created it, register it using hotplugger_register_driver()
+like so
+
+hotplugger_register_driver(&handler);
+
+If your module is unloadable, then make sure to unregister it with
+hotplugger_unregister_driver() like so;
+
+hotplugger_register_driver(&handler);
+
+Next is to disable other running modules.
+
+Tip: There exists a macro is_enabled_func(variable) which will
+     create a wrapper function around variable. The macro creates
+     a is_enabled() function of type bool something like these.
+
+     static bool is_enabled (void)
+
+     If the variable corresponds to a disabled variable instead
+     of enabled there exists is_not_enabled_func(variable) macro
+     which is essentially the same with is_enabled_func macro
+     but with its return values switched.
+
+---------------------------------------------
+Disable/enable running modules from the code:
+---------------------------------------------
+
+Every time your module is resuming/starting it's work
+you have to call hotplugger_disable_conflicts() function
+defined by this
+
+int hotplugger_disable_conflicts(struct hotplugger_driver *driver);
+
+The first argument is to provides the list and the identification of
+the module. This is the function that tries to parse and disable
+running modules according to the list.
+
+This would return 0 in success any other value is an error.
+
+But if for some reason you want to enable a cpu hotplug module
+you could use hotplugger_enable_one() defined as
+
+int hotplugger_enable_one(char *name);
+
+Unlike the previous function, you can use this anywhere.
+It takes the name of the module you want to activate/enable as
+its first parameter. It also returns a non-zero integer when there's
+an error.
+
+It might be better to enclose all these codes in an #ifdef macro
+so that you could compile the module even without the
+CONFIG_HOTPLUGGER_INTERFACE being defined.
+You could probably do it like this:
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+...code here...
+#endif
+
+------------
+Sysfs files:
+------------
+
+The sysfs knobs can be found at /sys/kernel/hotplugger.
+and contains three files.
+
+    available_drivers [read-only, 0444]
+    enable_driver     [read-write, 0644]
+    disable_driver    [read-write, 0644]
+    enabled           [read-write, 0644]
+
+available_drivers shows all of the modules registered, everything
+enclosed in square brackets [] are currently running. You cannot
+write to this file.
+
+enable_driver shows all of running modules. Writing a the name
+of the module here would be enabled. This could return a non-zero
+value.
+
+disable_drivers shows all of stopped modules. Like the enable_driver,
+writing the name of the running module would be disabled.
+
+By the current implementation, you may not enable or disable multiple
+modules in one invocation.
+
+enabled shows whether the interface is enabled. You can only write
+0 or 1 as integers, not string or "1" or "0" -- quotation marks included.
+0 represents false while 1 represents true. Writing 0 to this file
+will disable most of the features of this interface. Writing 1 will
+undo it.
+
+By default, the interface is enabled.
