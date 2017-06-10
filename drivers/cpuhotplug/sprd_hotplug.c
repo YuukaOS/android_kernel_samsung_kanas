@@ -24,6 +24,10 @@
 #include "../cpufreq/cpufreq_governor.h"
 #include <linux/sprd.h>
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+#include <linux/hotplugger.h>
+#endif
+
 // #define CPU_HOTPLUG_DISABLE_WQ
 #ifdef CPU_HOTPLUG_DISABLE_WQ
 #define HOTPLUG_DISABLE_ACTION_NONE     0
@@ -40,6 +44,11 @@ static unsigned long boot_done;
 
 static struct delayed_work plugin_work;
 static struct delayed_work unplug_work;
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+static struct hotplugger_driver hotplugger_handle;
+is_not_enabled_func(g_sd_tuners->cpu_hotplug_disable);
+#endif
 
 u64 g_prev_cpu_wall[4] = {0};
 u64 g_prev_cpu_idle[4] = {0};
@@ -101,6 +110,52 @@ static void sprd_unplug_one_cpu_ss(struct work_struct *work)
 	}
 #endif
 	return;
+}
+
+static int toggle_cpuhotplug(bool state) {
+#ifdef CONFIG_HOTPLUG_CPU
+#ifndef CPU_HOTPLUG_DISABLE_WQ
+	unsigned int cpu;
+	int i;
+#endif
+	int ret;
+#endif
+
+	if (g_sd_tuners == NULL)
+		return -EPERM;
+
+	if (g_sd_tuners->cpu_num_limit > 1) {
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+		if (state)
+			hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
+		g_sd_tuners->cpu_hotplug_disable = !state;
+	}
+
+	smp_wmb();
+	/* plug-in all offline cpu mandatory if we didn't
+	 * enable CPU_DYNAMIC_HOTPLUG
+	 */
+#ifdef CONFIG_HOTPLUG_CPU
+	if (g_sd_tuners->cpu_hotplug_disable) {
+#ifdef CPU_HOTPLUG_DISABLE_WQ
+		atomic_set(&hotplug_disable_state, HOTPLUG_DISABLE_ACTION_ACTIVE);
+		schedule_delayed_work_on(0, &plugin_work, 0);
+#else
+		for_each_cpu(cpu, cpu_possible_mask) {
+			if (!cpu_online(cpu))
+				{
+					for (i = 0; i < 5; i++) {
+						ret = cpu_up(cpu);
+						if (ret != -ENOSYS)
+							break;
+					}
+				}
+		}
+#endif
+	}
+#endif
+    return 0;
 }
 
 void sd_check_cpu_sprd(unsigned int load)
@@ -390,10 +445,6 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 {
 	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
 	unsigned int input;
-#ifndef CPU_HOTPLUG_DISABLE_WQ
-	unsigned int cpu;
-	int i;
-#endif
 	int ret;
 
 	ret = sscanf(buf, "%u", &input);
@@ -405,32 +456,7 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 	if (sd_tuners->cpu_hotplug_disable == input) {
 		return count;
 	}
-	if (sd_tuners->cpu_num_limit > 1)
-		sd_tuners->cpu_hotplug_disable = input;
-
-	smp_wmb();
-	/* plug-in all offline cpu mandatory if we didn't
-	 * enable CPU_DYNAMIC_HOTPLUG
-         */
-#ifdef CONFIG_HOTPLUG_CPU
-	if (sd_tuners->cpu_hotplug_disable) {
-#ifdef CPU_HOTPLUG_DISABLE_WQ
-		atomic_set(&hotplug_disable_state, HOTPLUG_DISABLE_ACTION_ACTIVE);
-		schedule_delayed_work_on(0, &plugin_work, 0);
-#else
-		for_each_cpu(cpu, cpu_possible_mask) {
-			if (!cpu_online(cpu))
-				{
-					for (i = 0; i < 5; i++) {
-						ret = cpu_up(cpu);
-						if (ret != -ENOSYS)
-							break;
-					}
-				}
-		}
-#endif
-	}
-#endif
+	toggle_cpuhotplug(input >= 1 ? false : true);
 	return count;
 }
 
@@ -554,7 +580,15 @@ static int __init sprd_hotplug_init(void)
 {
 	int i;
 	int ret; 
-	
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	hotplugger_handle = (struct hotplugger_driver) {
+		.name="cpuhotplug",
+		.change_state=&toggle_cpuhotplug,
+		.is_enabled=&is_enabled,
+	};
+#endif
+
 	boot_done = jiffies + CPU_HOTPLUG_BOOT_DONE_TIME;
 
 	if (!g_sd_tuners)
@@ -587,6 +621,11 @@ static int __init sprd_hotplug_init(void)
 	if (ret) {
 		pr_err("%s: Failed to add kobject for hotplug\n", __func__);
 	}
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	hotplugger_register_driver(&hotplugger_handle);
+#endif
+
 	return 0;
 }
 
