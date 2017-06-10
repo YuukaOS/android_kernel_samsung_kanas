@@ -48,7 +48,7 @@
 #define GR_GEN1			(REG_GLB_GEN1)
 #endif
 
-#define FREQ_TABLE_SIZE 	10
+#define FREQ_TABLE_SIZE 	20
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
 #define TRANSITION_LATENCY	(100 * 1000) /* ns */
@@ -204,48 +204,86 @@ static struct cpufreq_table_data sc8830_cpufreq_table_data_cs = {
 		900000,
 		900000,
 	},
-#else
+#elif defined(CONFIG_SC8830_OC)
 	.freq_tbl = {
-#if defined(CONFIG_SC8830_OC)
 		{0, 1400000},
 		{1, 1300000},
 		{2, 1200000},
-		{3, 1000000},
-		{4, SHARK_TDPLL_FREQUENCY},
-		{5, 600000},
-		{6, 500000},
-		{7, 300000},
-#else
-		{0, 1200000},
-		{1, 1100000},
-		{2, 1000000},
-		{3, SHARK_TDPLL_FREQUENCY},
-		{4, 600000},
-		{5, 500000},
-		{6, 400000},
-		{7, 300000},
-#endif
+        {3, 1100000},
+		{4, 1000000},
+		{5, 900000},
+		{6, 800000},        
+		{7, SHARK_TDPLL_FREQUENCY},
+		{8, 700000},
+		{9, 600000},
+		{10, 500000},
+        {11, 400000},
+		{12, 300000},
 #if defined(CONFIG_SC8830_POWERSAVE)
-		{8, 200000},
-		{9, CPUFREQ_TABLE_END},
+		{13, 200000},
+		{14, CPUFREQ_TABLE_END},
 #else
-        {8, CPUFREQ_TABLE_END},
+        {13, CPUFREQ_TABLE_END},
 #endif
 	},
 	.vddarm_mv = {
 		1300000,
 		1250000,
 		1200000,
+		1175000,
 		1150000,
+		1125000,
 		1100000,
-		1075000,
+		1100000,
 		1050000,
 		1000000,
+		975000,
+		950000,
+		900000,
 #if defined(CONFIG_SC8830_POWERSAVE)
 		875000,
 		875000,
 #else
+		900000,
+#endif
+	},
+#else
+	.freq_tbl = {
+		{0, 1200000},
+		{1, 1100000},
+		{2, 1000000},
+		{3, 900000},
+		{4, 800000},        
+		{5, SHARK_TDPLL_FREQUENCY},
+		{6, 700000},
+		{7, 600000},
+		{8, 500000},
+        {9, 400000},
+		{10, 300000},
+#if defined(CONFIG_SC8830_POWERSAVE)
+		{11, 200000},
+		{12, CPUFREQ_TABLE_END},
+#else
+        {11, CPUFREQ_TABLE_END},
+#endif
+	},
+	.vddarm_mv = {
+		1300000,
+		1250000,
+		1200000,
+		1175000,
+		1150000,
+		1125000,
+		1100000,
+		1100000,
+		1050000,
 		1000000,
+		900000,
+#if defined(CONFIG_SC8830_POWERSAVE)
+		875000,
+		875000,
+#else
+		900000,
 #endif
 	},
 #endif
