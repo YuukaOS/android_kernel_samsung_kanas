@@ -1,0 +1,2 @@
+# AutoSMP hotplug
+source "arch/arm/hotplug/autosmp/Kconfig"
