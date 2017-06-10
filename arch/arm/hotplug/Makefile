@@ -1,2 +1,2 @@
-obj-y	:= intelli_plug.o
-
+# Intelli_plug
+obj-y	+= intelli_plug/
