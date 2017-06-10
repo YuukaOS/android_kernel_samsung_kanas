@@ -393,6 +393,7 @@ int hotplugger_disable_conflicts(struct hotplugger_driver *driver)
 	}
 
 	if (atomic_read(&enabled) <= 0){
+        pr_debug("%s: enabled = %d \n", __func__, atomic_read(&enabled));
 		pr_debug("%s: hotplugger is disabled\n", __func__);
 		return -EPERM;
 	}
@@ -473,6 +474,7 @@ int hotplugger_enable_one(const char *name)
 	         __func__, name);
 
 	if (atomic_read(&enabled) <= 0){
+        pr_debug("%s: enabled = %d \n", __func__, atomic_read(&enabled));
 		pr_debug("%s: hotplugger is disabled\n", __func__);
 		return -EPERM;
 	}

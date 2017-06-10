@@ -96,14 +96,14 @@ Note: It is advisable to do the initialization of the struct
       to prevent issues about implicit declarations and such.
       something like this:
 .......somewhere at the top......
-static struct hotplugger_driver handler;
+struct hotplugger_driver handler;
 ...
 ... some codes and functions
 ...
 ...some_module_init(...)
 {
 ...
-	handler =  {
+	handler = (struct hotplugger_driver) {
 		.name = "module_name",
 		.change_state = &toggle,
 		.is_enabled = &enabled,
