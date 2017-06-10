@@ -448,6 +448,9 @@ config SPRD_CPU_DYNAMIC_HOTPLUG
 	depends on HOTPLUG_CPU
 	depends on ARCH_SCX35
 
+# User-made hotplug modules resides here
+source "arch/arm/hotplug/Kconfig"
+
 config SPRD_MEM_POOL
 	default y
 	bool "Using a memory pool to alloc 8k to 64k"

@@ -1,0 +1,2 @@
+# Alucard hotplug
+source "arch/arm/hotplug/alucard/Kconfig"
