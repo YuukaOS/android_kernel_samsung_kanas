@@ -28,6 +28,10 @@
 #include <linux/cpumask.h>
 #include <linux/hrtimer.h>
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+#include <linux/hotplugger.h>
+#endif
+
 #define DEBUG 0
 
 #define ASMP_TAG "AutoSMP: "
@@ -40,6 +44,10 @@ struct asmp_cpudata_t {
 static struct delayed_work asmp_work;
 static struct workqueue_struct *asmp_workq;
 static DEFINE_PER_CPU(struct asmp_cpudata_t, asmp_cpudata);
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+static struct hotplugger_driver hotplugger_handle;
+#endif
 
 static struct asmp_param_struct {
 	unsigned int delay;
@@ -64,6 +72,10 @@ static struct asmp_param_struct {
 static unsigned int cycle = 0, delay0 = 0;
 static unsigned long delay_jif = 0;
 static int enabled __read_mostly = 0;
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+is_enabled_func(enabled);
+#endif
 
 static void __cpuinit asmp_work_fn(struct work_struct *work) {
 	unsigned int cpu = 0, slow_cpu = 0;
@@ -175,7 +187,12 @@ static int __cpuinit set_enabled(const char *val, const struct kernel_param *kp)
 	unsigned int cpu;
 
 	ret = param_set_bool(val, kp);
+
 	if (enabled) {
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+		hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
 		queue_delayed_work(asmp_workq, &asmp_work,
 				msecs_to_jiffies(asmp_param.delay));
 		pr_info(ASMP_TAG"enabled\n");
@@ -287,12 +304,51 @@ static struct attribute_group asmp_stats_attr_group = {
 	.attrs = asmp_stats_attributes,
 	.name = "stats",
 };
+
 #endif
+
+static void toggle_enabled(bool state) {
+	unsigned int cpu;
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	if (state)
+		hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
+
+	enabled = state;
+	if (enabled) {
+		queue_delayed_work(asmp_workq, &asmp_work,
+				msecs_to_jiffies(asmp_param.delay));
+		pr_info(ASMP_TAG"enabled\n");
+	} else {
+		cancel_delayed_work_sync(&asmp_work);
+		for_each_present_cpu(cpu) {
+			if (num_online_cpus() >= nr_cpu_ids)
+				break;
+			if (!cpu_online(cpu))
+				cpu_up(cpu);
+		}
+		pr_info(ASMP_TAG"disabled\n");
+	}
+
+}
+
 /****************************** SYSFS END ******************************/
 
 static int __init asmp_init(void) {
 	unsigned int cpu;
 	int rc;
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	hotplugger_handle = (struct hotplugger_driver) {
+		.name = "autosmp",
+		.change_state = &toggle_enabled,
+		.is_enabled = &is_enabled,
+		.blacklist = (char*[]){"cpuhotplug",
+		                       NULL,
+		                      },
+	};
+#endif
 
 	asmp_param.max_cpus = nr_cpu_ids;
 	for_each_possible_cpu(cpu)
@@ -320,6 +376,10 @@ static int __init asmp_init(void) {
 #endif
 	} else
 		pr_warn(ASMP_TAG"ERROR, create sysfs kobj");
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	hotplugger_register_driver(&hotplugger_handle);
+#endif
 
 	pr_info(ASMP_TAG"initialized\n");
 	return 0;
