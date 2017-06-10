@@ -344,9 +344,6 @@ static int __init asmp_init(void) {
 		.name = "autosmp",
 		.change_state = &toggle_enabled,
 		.is_enabled = &is_enabled,
-		.blacklist = (char*[]){"cpuhotplug",
-		                       NULL,
-		                      },
 	};
 #endif
 
