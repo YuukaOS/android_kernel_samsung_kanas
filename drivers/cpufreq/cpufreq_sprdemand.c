@@ -33,37 +33,8 @@
 /*#include <linux/input.h>*/
 
 #include "cpufreq_governor.h"
+#include <linux/sprd.h>
 
-/* On-demand governor macros */
-#define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(10)
-#define DEF_FREQUENCY_UP_THRESHOLD		(80)
-#define DEF_SAMPLING_DOWN_FACTOR		(1)
-#define MAX_SAMPLING_DOWN_FACTOR		(100000)
-#define MICRO_FREQUENCY_DOWN_DIFFERENTIAL	(3)
-#define MICRO_FREQUENCY_UP_THRESHOLD		(95)
-#define MICRO_FREQUENCY_MIN_SAMPLE_RATE		(10000)
-#define MIN_FREQUENCY_UP_THRESHOLD		(11)
-#define MAX_FREQUENCY_UP_THRESHOLD		(100)
-
-/* whether plugin cpu according to this score up threshold */
-#define DEF_CPU_SCORE_UP_THRESHOLD		(100)
-/* whether unplug cpu according to this down threshold*/
-#define DEF_CPU_LOAD_DOWN_THRESHOLD		(20)
-#define DEF_CPU_DOWN_COUNT		(3)
-
-#define LOAD_CRITICAL 100
-#define LOAD_HI 90
-#define LOAD_MID 80
-#define LOAD_LIGHT 50
-#define LOAD_LO 0
-
-#define LOAD_CRITICAL_SCORE 10
-#define LOAD_HI_SCORE 5
-#define LOAD_MID_SCORE 0
-#define LOAD_LIGHT_SCORE -10
-#define LOAD_LO_SCORE -20
-
-#define GOVERNOR_BOOT_TIME	(50*HZ)
 static unsigned long boot_done;
 
 unsigned int cpu_hotplug_disable_set = false;
@@ -78,9 +49,9 @@ struct delayed_work plugin_work;
 static DEFINE_PER_CPU(struct unplug_work_info, uwi);
 
 static DEFINE_SPINLOCK(g_lock);
-static unsigned int percpu_total_load[CONFIG_NR_CPUS] = {0};
-static unsigned int percpu_check_count[CONFIG_NR_CPUS] = {0};
-static int cpu_score = 0;
+unsigned int percpu_total_load[CONFIG_NR_CPUS] = {0};
+unsigned int percpu_check_count[CONFIG_NR_CPUS] = {0};
+int cpu_score = 0;
 
 struct thermal_cooling_info_t {
 	struct thermal_cooling_device *cdev;
@@ -133,7 +104,7 @@ static int should_io_be_busy(void)
 	return 0;
 }
 
-struct sd_dbs_tuners *g_sd_tuners = NULL;
+struct sd_dbs_tuners *g_sd_tuners;
 
 /*
  * Find right freq to be set now with powersave_bias on.
@@ -258,7 +229,7 @@ static void sprd_unplug_one_cpu(struct work_struct *work)
 	}
 
 
-#ifdef CONFIG_HOTPLUG_CPU
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (num_online_cpus() > 1) {
 		if (!sd_tuners->cpu_hotplug_disable) {
 			pr_info("!!  we gonna unplug cpu%d  !!\n", puwi->cpuid);
@@ -271,7 +242,9 @@ static void sprd_unplug_one_cpu(struct work_struct *work)
 
 static void sprd_plugin_one_cpu(struct work_struct *work)
 {
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	int cpuid, ret = 0, i;
+#endif
 	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
 	struct dbs_data *dbs_data = policy->governor_data;
 	struct sd_dbs_tuners *sd_tuners = NULL;
@@ -288,8 +261,7 @@ static void sprd_plugin_one_cpu(struct work_struct *work)
 		sd_tuners = dbs_data->tuners;
 	}
 
-
-#ifdef CONFIG_HOTPLUG_CPU
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (num_online_cpus() < sd_tuners->cpu_num_limit) {
 		cpuid = cpumask_next_zero(0, cpu_online_mask);
 		if (!sd_tuners->cpu_hotplug_disable) {
@@ -306,9 +278,6 @@ static void sprd_plugin_one_cpu(struct work_struct *work)
 }
 
 unsigned int percpu_load[4] = {0};
-#define MAX_CPU_NUM  (4)
-#define MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE  (8)
-#define MAX_PLUG_AVG_LOAD_SIZE (2)
 
 unsigned int ga_percpu_total_load[MAX_CPU_NUM][MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE] = {{0}};
 extern unsigned int dvfs_unplug_select;
@@ -375,7 +344,7 @@ unsigned int a_sub_windowsize[8][6] =
 	{0,1,1,2,3,3}
 };
 
-static int cpu_evaluate_score(int cpu, struct sd_dbs_tuners *sd_tunners , unsigned int load)
+int cpu_evaluate_score(int cpu, struct sd_dbs_tuners *sd_tunners , unsigned int load)
 {
 	int score = 0;
 	static int rate[4] = {1};
@@ -438,7 +407,7 @@ static int cpu_evaluate_score(int cpu, struct sd_dbs_tuners *sd_tunners , unsign
 
 
 
-static int sd_adjust_window(struct sd_dbs_tuners *sd_tunners , unsigned int load)
+int sd_adjust_window(struct sd_dbs_tuners *sd_tunners , unsigned int load)
 {
 	unsigned int cur_window_size = 0;
 
@@ -555,7 +524,7 @@ static unsigned int sd_unplug_avg_load(int cpu, struct sd_dbs_tuners *sd_tunners
 }
 #endif
 
-static unsigned int sd_unplug_avg_load1(int cpu, struct sd_dbs_tuners *sd_tunners , unsigned int load)
+unsigned int sd_unplug_avg_load1(int cpu, struct sd_dbs_tuners *sd_tunners , unsigned int load)
 {
 	int avg_load = 0;
 	int cur_window_pos = 0;
@@ -663,7 +632,7 @@ static unsigned int sd_unplug_avg_load1(int cpu, struct sd_dbs_tuners *sd_tunner
 
 }
 
-static unsigned int sd_unplug_avg_load11(int cpu, struct sd_dbs_tuners *sd_tunners , unsigned int load)
+unsigned int sd_unplug_avg_load11(int cpu, struct sd_dbs_tuners *sd_tunners , unsigned int load)
 {
 	int avg_load = 0;
 	int cur_window_pos = 0;
@@ -816,7 +785,6 @@ static void sd_check_cpu(int cpu, unsigned int load)
 	}
 
 plug_check:
-
 	/* skip cpu hotplug check if hotplug is disabled */
 	if (sd_tuners->cpu_hotplug_disable)
 		return;
@@ -1398,8 +1366,12 @@ static ssize_t store_cpu_hotplug_disable(struct dbs_data *dbs_data, const char *
 		size_t count)
 {
 	struct sd_dbs_tuners *sd_tuners = dbs_data->tuners;
-	unsigned int input, cpu;
-	int ret, i;
+	unsigned int input;
+	int ret;
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+	unsigned int cpu;
+	int i;
+#endif
 	ret = sscanf(buf, "%u", &input);
 
 	if (ret != 1) {
@@ -1421,7 +1393,7 @@ static ssize_t store_cpu_hotplug_disable(struct dbs_data *dbs_data, const char *
 	/* plug-in all offline cpu mandatory if we didn't
 	 * enbale CPU_DYNAMIC_HOTPLUG
          */
-#ifdef CONFIG_HOTPLUG_CPU
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (sd_tuners->cpu_hotplug_disable) {
 		for_each_cpu(cpu, cpu_possible_mask) {
 			if (!cpu_online(cpu))
@@ -1552,39 +1524,11 @@ static struct attribute_group sd_attr_group_gov_pol = {
 };
 
 /************************** sysfs end ************************/
-
-static int sd_init(struct dbs_data *dbs_data)
+int sd_tuners_init(struct sd_dbs_tuners *tuners)
 {
-	struct sd_dbs_tuners *tuners;
-	u64 idle_time;
-	int cpu, i;
-	struct unplug_work_info *puwi;
-
-	tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
-
 	if (!tuners) {
 		pr_err("%s: kzalloc failed\n", __func__);
 		return -ENOMEM;
-	}
-
-	cpu = get_cpu();
-	idle_time = get_cpu_idle_time_us(cpu, NULL);
-	put_cpu();
-	if (idle_time != -1ULL) {
-		/* Idle micro accounting is supported. Use finer thresholds */
-		tuners->up_threshold = MICRO_FREQUENCY_UP_THRESHOLD;
-		/*
-		 * In nohz/micro accounting case we set the minimum frequency
-		 * not depending on HZ, but fixed (very low). The deferred
-		 * timer might skip some samples if idle/sleeping as needed.
-		*/
-		dbs_data->min_sampling_rate = MICRO_FREQUENCY_MIN_SAMPLE_RATE;
-	} else {
-		tuners->up_threshold = DEF_FREQUENCY_UP_THRESHOLD;
-
-		/* For correct statistics, we need 10 ticks for each measure */
-		dbs_data->min_sampling_rate = MIN_SAMPLING_RATE_RATIO *
-			jiffies_to_usecs(10);
 	}
 
 	tuners->sampling_down_factor = DEF_SAMPLING_DOWN_FACTOR;
@@ -1609,9 +1553,48 @@ static int sd_init(struct dbs_data *dbs_data)
 	tuners->cpu_down_count = DEF_CPU_DOWN_COUNT;
 	tuners->cpu_num_limit = nr_cpu_ids;
 	tuners->cpu_num_min_limit = 1;
-
 	if (tuners->cpu_num_limit > 1)
 		tuners->cpu_hotplug_disable = false;
+
+	return 0;
+}
+
+static int sd_init(struct dbs_data *dbs_data)
+{
+	struct sd_dbs_tuners *tuners = NULL;
+	u64 idle_time;
+	int cpu, i, ret;
+	struct unplug_work_info *puwi;
+
+	if (g_sd_tuners != NULL) {
+		tuners = g_sd_tuners;
+	} else {
+		tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
+		ret = sd_tuners_init(tuners);
+		if (ret) {
+			return ret;
+		}
+
+		cpu = get_cpu();
+		idle_time = get_cpu_idle_time_us(cpu, NULL);
+		put_cpu();
+		if (idle_time != -1ULL) {
+			/* Idle micro accounting is supported. Use finer thresholds */
+			tuners->up_threshold = MICRO_FREQUENCY_UP_THRESHOLD;
+			/*
+			* In nohz/micro accounting case we set the minimum frequency
+			* not depending on HZ, but fixed (very low). The deferred
+			* timer might skip some samples if idle/sleeping as needed.
+			*/
+			dbs_data->min_sampling_rate = MICRO_FREQUENCY_MIN_SAMPLE_RATE;
+		} else {
+			tuners->up_threshold = DEF_FREQUENCY_UP_THRESHOLD;
+
+			/* For correct statistics, we need 10 ticks for each measure */
+			dbs_data->min_sampling_rate = MIN_SAMPLING_RATE_RATIO *
+				jiffies_to_usecs(10);
+		}
+	}
 
 	//memcpy(g_sd_tuners,tuners,sizeof(struct sd_dbs_tuners));
 	g_sd_tuners = tuners;
@@ -1632,8 +1615,10 @@ static int sd_init(struct dbs_data *dbs_data)
 
 static void sd_exit(struct dbs_data *dbs_data)
 {
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	g_sd_tuners = NULL;
 	kfree(dbs_data->tuners);
+#endif
 }
 
 define_get_cpu_dbs_routines(sd_cpu_dbs_info);
@@ -1723,7 +1708,7 @@ static int set_cur_state(struct thermal_cooling_device *cdev,
 				sd_tuners->cpu_hotplug_disable = true;
 		dbs_freq_increase(policy, policy->max-1);
 		/* unplug all online cpu except cpu0 mandatory */
-#ifdef CONFIG_HOTPLUG_CPU
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 		for_each_online_cpu(cpu) {
 			if (cpu)
 				{
@@ -1739,7 +1724,7 @@ static int set_cur_state(struct thermal_cooling_device *cdev,
 		/* plug-in all offline cpu mandatory if we didn't
 		  * enbale CPU_DYNAMIC_HOTPLUG
 		 */
-#ifdef CONFIG_HOTPLUG_CPU
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 		for_each_cpu(cpu, cpu_possible_mask) {
 			if (!cpu_online(cpu))
 				{
@@ -1781,9 +1766,11 @@ static int sprdemand_gov_pm_notifier_call(struct notifier_block *nb,
 	 * one to make sure all things go right */
 	if (event == PM_SUSPEND_PREPARE || event == PM_HIBERNATION_PREPARE) {
 		pr_info(" %s, recv pm suspend notify\n", __func__ );
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 		if (sd_tuners->cpu_num_limit > 1)
 			if(cpu_hotplug_disable_set == false)
 				sd_tuners->cpu_hotplug_disable = true;
+#endif
 		sd_tuners->is_suspend = true;
 		dbs_freq_increase(policy, policy->max);
 		pr_info(" %s, recv pm suspend notify done\n", __func__ );
@@ -1806,25 +1793,28 @@ static void sprdemand_gov_early_suspend(struct early_suspend *h)
 static void sprdemand_gov_late_resume(struct early_suspend *h)
 {
 	struct cpufreq_policy *policy = cpufreq_cpu_get(0);
-	struct dbs_data *dbs_data = policy->governor_data;
+/*	struct dbs_data *dbs_data = policy->governor_data; */
+	struct dbs_data *dbs_data = NULL;
 	struct sd_dbs_tuners *sd_tuners = NULL;
 
+	/* dbs_data is a traitor, we don't know is tuners is ours */
 	if(NULL == dbs_data)
 	{
 		pr_info("sprdemand_gov_late_resume governor %s return\n", policy->governor->name);
 		if (g_sd_tuners == NULL)
-			return ;
+			return;
 		sd_tuners = g_sd_tuners;
 	}
-	else
+/*	else
 	{
 		sd_tuners = dbs_data->tuners;
-	}
-
-
+	} 
+*/
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (sd_tuners->cpu_num_limit > 1)
 		if(cpu_hotplug_disable_set == false)
 			sd_tuners->cpu_hotplug_disable = false;
+#endif
 	sd_tuners->is_suspend = false;
 
 	return;
@@ -1865,7 +1855,7 @@ int _store_cpu_num_min_limit(unsigned int input)
 
 	if (sd_tuners) {
 		sd_tuners->cpu_num_min_limit = input;
-		int cpu = smp_processor_id();
+/*		int cpu = smp_processor_id();*/
 	} else {
 		pr_info("[store_cpu_num_min_limit] current governor is not sprdemand\n");
 		return -EINVAL;
@@ -2003,9 +1993,9 @@ static int __init cpufreq_gov_dbs_init(void)
 	register_early_suspend(&sprdemand_gov_earlysuspend_handler);
 #endif
 
-	g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
+/*	g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
 
-/*	input_wq = alloc_workqueue("iewq", WQ_MEM_RECLAIM|WQ_SYSFS, 1);
+	input_wq = alloc_workqueue("iewq", WQ_MEM_RECLAIM|WQ_SYSFS, 1);
 
 	if (!input_wq)
 	{
