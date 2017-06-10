@@ -1,2 +1,5 @@
 # Alucard hotplug
 source "arch/arm/hotplug/alucard/Kconfig"
+
+# AutoSMP hotplug
+source "arch/arm/hotplug/autosmp/Kconfig"
