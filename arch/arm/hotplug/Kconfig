@@ -1,2 +1,5 @@
+# AutoSMP hotplug
+source "arch/arm/hotplug/autosmp/Kconfig"
+
 # Intelli_plug
 source "arch/arm/hotplug/intelli_plug/Kconfig"
