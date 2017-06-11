@@ -35,6 +35,10 @@
 #include "cpufreq_governor.h"
 #include <linux/sprd.h>
 
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+#include <linux/hotplugger.h>
+#endif
+
 static unsigned long boot_done;
 
 unsigned int cpu_hotplug_disable_set = false;
@@ -105,6 +109,10 @@ static int should_io_be_busy(void)
 }
 
 struct sd_dbs_tuners *g_sd_tuners;
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+static struct hotplugger_driver hotplugger_handle;
+is_not_enabled_func(g_sd_tuners->cpu_hotplug_disable);
+#endif
 
 /*
  * Find right freq to be set now with powersave_bias on.
@@ -1381,8 +1389,13 @@ static ssize_t store_cpu_hotplug_disable(struct dbs_data *dbs_data, const char *
 	if (sd_tuners->cpu_hotplug_disable == input) {
 		return count;
 	}
-	if (sd_tuners->cpu_num_limit > 1)
+	if (sd_tuners->cpu_num_limit > 1) {
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+		if (!input)
+			hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
 		sd_tuners->cpu_hotplug_disable = input;
+	}
 
 	if(sd_tuners->cpu_hotplug_disable > 0)
 		cpu_hotplug_disable_set = true;
@@ -1553,8 +1566,12 @@ int sd_tuners_init(struct sd_dbs_tuners *tuners)
 	tuners->cpu_down_count = DEF_CPU_DOWN_COUNT;
 	tuners->cpu_num_limit = nr_cpu_ids;
 	tuners->cpu_num_min_limit = 1;
-	if (tuners->cpu_num_limit > 1)
+	if (tuners->cpu_num_limit > 1) {
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+		hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
 		tuners->cpu_hotplug_disable = false;
+	}
 
 	return 0;
 }
@@ -1565,6 +1582,14 @@ static int sd_init(struct dbs_data *dbs_data)
 	u64 idle_time;
 	int cpu, i, ret;
 	struct unplug_work_info *puwi;
+
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+	hotplugger_handler = (struct hotplugger_driver) {
+		.name="sprdemand",
+		.change_state=&toggle_hotplugging,
+		.is_enabled=&is_enabled,
+	};
+#endif
 
 	if (g_sd_tuners != NULL) {
 		tuners = g_sd_tuners;
@@ -1610,6 +1635,10 @@ static int sd_init(struct dbs_data *dbs_data)
 		INIT_DELAYED_WORK(&puwi->unplug_work, sprd_unplug_one_cpu);
 	}
 
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+	hotplugger_register_driver(&hotplugger_handle);
+#endif
+
 	return 0;
 }
 
@@ -1618,6 +1647,9 @@ static void sd_exit(struct dbs_data *dbs_data)
 #if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	g_sd_tuners = NULL;
 	kfree(dbs_data->tuners);
+#endif
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+	hotplugger_unregister_driver(&hotplugger_handle);
 #endif
 }
 
@@ -1718,9 +1750,14 @@ static int set_cur_state(struct thermal_cooling_device *cdev,
 #endif
 	} else {
 		pr_info("%s:cpufreq cooling down\n", __func__);
-		if (sd_tuners->cpu_num_limit > 1)
-			if(cpu_hotplug_disable_set == false)
+		if (sd_tuners->cpu_num_limit > 1) {
+			if(cpu_hotplug_disable_set == false) {
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+				hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
 				sd_tuners->cpu_hotplug_disable = false;
+			}
+		}
 		/* plug-in all offline cpu mandatory if we didn't
 		  * enbale CPU_DYNAMIC_HOTPLUG
 		 */
@@ -1812,8 +1849,12 @@ static void sprdemand_gov_late_resume(struct early_suspend *h)
 */
 #if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	if (sd_tuners->cpu_num_limit > 1)
-		if(cpu_hotplug_disable_set == false)
+		if(cpu_hotplug_disable_set == false) {
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+			hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
 			sd_tuners->cpu_hotplug_disable = false;
+		}
 #endif
 	sd_tuners->is_suspend = false;
 
@@ -1977,6 +2018,13 @@ struct input_handler dbs_input_handler = {
 	.id_table	= dbs_ids,
 };
 */
+
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+static int toggle_hotplugging(bool state) {
+	return store_cpu_hotplug_disable(&g_sd_tuners, state ? "0" : "1", 0);
+}
+#endif
+
 static int __init cpufreq_gov_dbs_init(void)
 {
 	/*int i = 0;*/
