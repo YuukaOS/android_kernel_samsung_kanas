@@ -307,16 +307,15 @@ static struct attribute_group asmp_stats_attr_group = {
 
 #endif
 
-static void toggle_enabled(bool state) {
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+static int toggle_enabled(bool state) {
 	unsigned int cpu;
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
 	if (state)
 		hotplugger_disable_conflicts(&hotplugger_handle);
-#endif
 
 	enabled = state;
-	if (enabled) {
+	if (state) {
 		queue_delayed_work(asmp_workq, &asmp_work,
 				msecs_to_jiffies(asmp_param.delay));
 		pr_info(ASMP_TAG"enabled\n");
@@ -330,8 +329,11 @@ static void toggle_enabled(bool state) {
 		}
 		pr_info(ASMP_TAG"disabled\n");
 	}
+	enabled = state; /* Yes, duplication */
 
+	return 0;
 }
+#endif
 
 /****************************** SYSFS END ******************************/
 
