@@ -56,6 +56,7 @@ static DEFINE_SPINLOCK(g_lock);
 unsigned int percpu_total_load[CONFIG_NR_CPUS] = {0};
 unsigned int percpu_check_count[CONFIG_NR_CPUS] = {0};
 int cpu_score = 0;
+static unsigned int g_starts;
 
 struct thermal_cooling_info_t {
 	struct thermal_cooling_device *cdev;
@@ -1373,13 +1374,20 @@ static ssize_t store_cpu_down_count(struct dbs_data *dbs_data, const char *buf,
 static ssize_t store_cpu_hotplug_disable(struct dbs_data *dbs_data, const char *buf,
 		size_t count)
 {
-	struct sd_dbs_tuners *sd_tuners = dbs_data->tuners;
+	struct sd_dbs_tuners *sd_tuners = NULL;
 	unsigned int input;
 	int ret;
 #if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	unsigned int cpu;
 	int i;
 #endif
+	if (dbs_data && dbs_data->tuners)
+		sd_tuners = dbs_data->tuners;
+	else if (g_sd_tuners)
+		sd_tuners = g_sd_tuners;
+	else
+		return -EFAULT;
+
 	ret = sscanf(buf, "%u", &input);
 
 	if (ret != 1) {
@@ -1583,13 +1591,6 @@ static int sd_init(struct dbs_data *dbs_data)
 	int cpu, i, ret;
 	struct unplug_work_info *puwi;
 
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-	hotplugger_handler = (struct hotplugger_driver) {
-		.name="sprdemand",
-		.change_state=&toggle_hotplugging,
-		.is_enabled=&is_enabled,
-	};
-#endif
 
 	if (g_sd_tuners != NULL) {
 		tuners = g_sd_tuners;
@@ -1635,10 +1636,6 @@ static int sd_init(struct dbs_data *dbs_data)
 		INIT_DELAYED_WORK(&puwi->unplug_work, sprd_unplug_one_cpu);
 	}
 
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-	hotplugger_register_driver(&hotplugger_handle);
-#endif
-
 	return 0;
 }
 
@@ -1647,9 +1644,6 @@ static void sd_exit(struct dbs_data *dbs_data)
 #if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	g_sd_tuners = NULL;
 	kfree(dbs_data->tuners);
-#endif
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-	hotplugger_unregister_driver(&hotplugger_handle);
 #endif
 }
 
@@ -1675,9 +1669,37 @@ static struct common_dbs_data sd_dbs_cdata = {
 	.exit = sd_exit,
 };
 
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+static int toggle_hotplugging(bool state) {
+	return store_cpu_hotplug_disable(NULL, state ? "0" : "1", 0);
+}
+
+static struct hotplugger_driver hotplugger_handle = {
+	.name="sprdemand",
+	.change_state=&toggle_hotplugging,
+	.is_enabled=&is_enabled,
+};
+#endif
+
 static int sd_cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		unsigned int event)
 {
+
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+	switch (event) {
+	case CPUFREQ_GOV_START:
+		g_starts++;
+		if (g_starts == 1)
+			hotplugger_register_driver(&hotplugger_handle);
+		break;
+	case CPUFREQ_GOV_STOP:
+		if (g_starts == 1)
+			hotplugger_unregister_driver(&hotplugger_handle);
+		g_starts--;
+		break;
+	}
+#endif
+
 	return cpufreq_governor_dbs(policy, &sd_dbs_cdata, event);
 }
 
@@ -2018,12 +2040,6 @@ struct input_handler dbs_input_handler = {
 	.id_table	= dbs_ids,
 };
 */
-
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-static int toggle_hotplugging(bool state) {
-	return store_cpu_hotplug_disable(&g_sd_tuners, state ? "0" : "1", 0);
-}
-#endif
 
 static int __init cpufreq_gov_dbs_init(void)
 {
