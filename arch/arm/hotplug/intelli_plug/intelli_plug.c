@@ -65,7 +65,7 @@ static unsigned int intelli_plug_active = 0;
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
 is_enabled_func(intelli_plug_active);
 static void change_state(bool state) {
-	if (state && intelli_plug_active != state) {
+	if (state && intelli_plug_active == false) {
 		hotplugger_disable_conflicts(&intelli_plug_hotplug_handler);
 	}
 	intelli_plug_active = state;
@@ -76,7 +76,7 @@ static int param_set_intelli_plug_active(const char *val, const struct kernel_pa
 	int ret;
 
 	ret = param_set_uint(val, kp);
-	if (old_val && intelli_plug_active != old_val) {
+	if (intelli_plug_active == true && old_val == false) {
 		hotplugger_disable_conflicts(&intelli_plug_hotplug_handler);
 	}
 
