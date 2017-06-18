@@ -56,6 +56,7 @@ static DEFINE_SPINLOCK(g_lock);
 unsigned int percpu_total_load[CONFIG_NR_CPUS] = {0};
 unsigned int percpu_check_count[CONFIG_NR_CPUS] = {0};
 int cpu_score = 0;
+static unsigned int g_starts;
 
 struct thermal_cooling_info_t {
 	struct thermal_cooling_device *cdev;
@@ -1591,10 +1592,6 @@ static int sd_init(struct dbs_data *dbs_data)
 	struct unplug_work_info *puwi;
 
 
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-	hotplugger_register_driver(&hotplugger_handle);
-#endif
-
 	if (g_sd_tuners != NULL) {
 		tuners = g_sd_tuners;
 	} else {
@@ -1648,9 +1645,6 @@ static void sd_exit(struct dbs_data *dbs_data)
 	g_sd_tuners = NULL;
 	kfree(dbs_data->tuners);
 #endif
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-	hotplugger_unregister_driver(&hotplugger_handle);
-#endif
 }
 
 define_get_cpu_dbs_routines(sd_cpu_dbs_info);
@@ -1690,6 +1684,22 @@ static struct hotplugger_driver hotplugger_handle = {
 static int sd_cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		unsigned int event)
 {
+
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+	switch (event) {
+	case CPUFREQ_GOV_START:
+		g_starts++;
+		if (g_starts == 1)
+			hotplugger_register_driver(&hotplugger_handle);
+		break;
+	case CPUFREQ_GOV_STOP:
+		if (g_starts == 1)
+			hotplugger_unregister_driver(&hotplugger_handle);
+		g_starts--;
+		break;
+	}
+#endif
+
 	return cpufreq_governor_dbs(policy, &sd_dbs_cdata, event);
 }
 
