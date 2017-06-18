@@ -26,6 +26,8 @@ int hotplugger_register_driver(struct hotplugger_driver *driver);
 
 void hotplugger_unregister_driver(struct hotplugger_driver *driver);
 
+int hotplugger_get_running(void);
+
 int hotplugger_disable_conflicts(struct hotplugger_driver *driver);
 
 int hotplugger_enable_one(const char *name);

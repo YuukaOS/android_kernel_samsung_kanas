@@ -452,15 +452,28 @@ static int __init hotplugger_init(void)
 {
 	int ret;
 
-	pr_debug("hotplugger init START!!!\n");
+	pr_debug("hotplugger sysfs init START!!!\n");
 	ret = sysfs_create_group(kernel_kobj, &hotplugger_attr_group);
 	if (ret) {
 		pr_err("%s: sysfs_create_group failed\n", __func__);
 		return ret;
 	}
-	pr_debug("hotplugger init END!!!\n");
+	pr_debug("hotplugger sysfs init END!!!\n");
 	return 0;
 }
+
+int hotplugger_get_running(void) {
+	int num = 0;
+	struct hotplugger_driver *d = NULL;
+
+	mutex_lock(&hotplugger_driver_mutex);
+	list_for_each_entry(d, &hotplugger_driver_list, list)
+		num++;
+	mutex_unlock(&hotplugger_driver_mutex);
+
+	return num;
+}
+EXPORT_SYMBOL_GPL(hotplugger_get_running);
 
 int hotplugger_disable_conflicts(struct hotplugger_driver *driver)
 {
