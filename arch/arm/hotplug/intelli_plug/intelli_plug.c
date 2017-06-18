@@ -64,11 +64,12 @@ struct hotplugger_driver intelli_plug_hotplug_handler;
 static unsigned int intelli_plug_active = 0;
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
 is_enabled_func(intelli_plug_active);
-static void change_state(bool state) {
+static int change_state(bool state) {
 	if (state && intelli_plug_active == false) {
 		hotplugger_disable_conflicts(&intelli_plug_hotplug_handler);
 	}
 	intelli_plug_active = state;
+        return 0;
 }
 
 static int param_set_intelli_plug_active(const char *val, const struct kernel_param *kp) {
