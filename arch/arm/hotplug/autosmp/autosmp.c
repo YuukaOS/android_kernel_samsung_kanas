@@ -73,10 +73,6 @@ static unsigned int cycle = 0, delay0 = 0;
 static unsigned long delay_jif = 0;
 static int enabled __read_mostly = 0;
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-is_enabled_func(enabled);
-#endif
-
 static void __cpuinit asmp_work_fn(struct work_struct *work) {
 	unsigned int cpu = 0, slow_cpu = 0;
 	unsigned int rate, cpu0_rate, slow_rate = UINT_MAX, fast_rate;
@@ -313,7 +309,7 @@ static struct attribute_group asmp_stats_attr_group = {
 static int toggle_enabled(bool state) {
 	unsigned int cpu;
 
-	if (state)
+	if (state && enabled != state)
 		hotplugger_disable_conflicts(&hotplugger_handle);
 
 	enabled = state;
@@ -339,16 +335,24 @@ static int toggle_enabled(bool state) {
 
 /****************************** SYSFS END ******************************/
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+is_enabled_func(enabled);
+
+static struct hotplugger_driver hotplugger_handle = {
+	.name = "autosmp",
+	.change_state = &toggle_enabled,
+	.is_enabled = &is_enabled,
+};
+#endif
+
 static int __init asmp_init(void) {
 	unsigned int cpu;
 	int rc;
 
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
-	hotplugger_handle = (struct hotplugger_driver) {
-		.name = "autosmp",
-		.change_state = &toggle_enabled,
-		.is_enabled = &is_enabled,
-	};
+	hotplugger_register_driver(&hotplugger_handle);
+	if (is_enabled())
+		hotplugger_disable_conflicts(&hotplugger_handle);
 #endif
 
 	asmp_param.max_cpus = nr_cpu_ids;
@@ -377,10 +381,6 @@ static int __init asmp_init(void) {
 #endif
 	} else
 		pr_warn(ASMP_TAG"ERROR, create sysfs kobj");
-
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	hotplugger_register_driver(&hotplugger_handle);
-#endif
 
 	pr_info(ASMP_TAG"initialized\n");
 	return 0;
