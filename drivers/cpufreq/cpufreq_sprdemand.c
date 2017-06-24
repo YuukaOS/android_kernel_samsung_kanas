@@ -56,7 +56,6 @@ static DEFINE_SPINLOCK(g_lock);
 unsigned int percpu_total_load[CONFIG_NR_CPUS] = {0};
 unsigned int percpu_check_count[CONFIG_NR_CPUS] = {0};
 int cpu_score = 0;
-static unsigned int g_starts;
 
 struct thermal_cooling_info_t {
 	struct thermal_cooling_device *cdev;
@@ -112,8 +111,8 @@ static int should_io_be_busy(void)
 struct sd_dbs_tuners *g_sd_tuners;
 #if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 static struct hotplugger_driver hotplugger_handle;
-is_not_enabled_func(g_sd_tuners->cpu_hotplug_disable);
 #endif
+
 
 /*
  * Find right freq to be set now with powersave_bias on.
@@ -1431,7 +1430,6 @@ static ssize_t store_cpu_hotplug_disable(struct dbs_data *dbs_data, const char *
 	return count;
 }
 
-
 show_store_one(sd, sampling_rate);
 show_store_one(sd, io_is_busy);
 show_store_one(sd, up_threshold);
@@ -1545,6 +1543,23 @@ static struct attribute_group sd_attr_group_gov_pol = {
 };
 
 /************************** sysfs end ************************/
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+static int toggle_hotplugging(bool state) {
+	return store_cpu_hotplug_disable(NULL, state ? "0" : "1", 0);
+}
+static bool is_enabled (void)
+{
+	if (!g_sd_tuners)
+		return false;
+	return g_sd_tuners->cpu_hotplug_disable ? false : true;
+}
+static struct hotplugger_driver hotplugger_handle = {
+	.name = "sprdemand",
+	.change_state = toggle_hotplugging,
+	.is_enabled = is_enabled,
+};
+#endif
+
 int sd_tuners_init(struct sd_dbs_tuners *tuners)
 {
 	if (!tuners) {
@@ -1575,9 +1590,6 @@ int sd_tuners_init(struct sd_dbs_tuners *tuners)
 	tuners->cpu_num_limit = nr_cpu_ids;
 	tuners->cpu_num_min_limit = 1;
 	if (tuners->cpu_num_limit > 1) {
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-		hotplugger_disable_conflicts(&hotplugger_handle);
-#endif
 		tuners->cpu_hotplug_disable = false;
 	}
 
@@ -1625,6 +1637,11 @@ static int sd_init(struct dbs_data *dbs_data)
 	//memcpy(g_sd_tuners,tuners,sizeof(struct sd_dbs_tuners));
 	g_sd_tuners = tuners;
 
+#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
+	if (tuners->cpu_hotplug_disable == false)
+		hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
+
 	dbs_data->tuners = tuners;
 	mutex_init(&dbs_data->mutex);
 
@@ -1669,37 +1686,21 @@ static struct common_dbs_data sd_dbs_cdata = {
 	.exit = sd_exit,
 };
 
-#if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
-static int toggle_hotplugging(bool state) {
-	return store_cpu_hotplug_disable(NULL, state ? "0" : "1", 0);
-}
-
-static struct hotplugger_driver hotplugger_handle = {
-	.name="sprdemand",
-	.change_state=&toggle_hotplugging,
-	.is_enabled=&is_enabled,
-};
-#endif
-
 static int sd_cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		unsigned int event)
 {
-
 #if defined CONFIG_HOTPLUGGER_INTERFACE  && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	switch (event) {
-	case CPUFREQ_GOV_START:
-		g_starts++;
-		if (g_starts == 1)
+	case CPUFREQ_GOV_POLICY_INIT:
+		if (policy->cpu == 0)
 			hotplugger_register_driver(&hotplugger_handle);
-		break;
-	case CPUFREQ_GOV_STOP:
-		if (g_starts == 1)
+	break;
+	case CPUFREQ_GOV_POLICY_EXIT:
+		if (policy->cpu == 0)
 			hotplugger_unregister_driver(&hotplugger_handle);
-		g_starts--;
-		break;
+	break;
 	}
 #endif
-
 	return cpufreq_governor_dbs(policy, &sd_dbs_cdata, event);
 }
 
