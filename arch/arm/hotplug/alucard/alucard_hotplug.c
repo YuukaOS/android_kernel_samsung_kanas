@@ -221,17 +221,6 @@ show_one(cpu_up_rate, cpu_up_rate);
 show_one(cpu_down_rate, cpu_down_rate);
 show_one(maxcoreslimit, maxcoreslimit);
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-#undef is_enabled_func
-#define is_enabled_func(variable)		\
-static bool is_enabled (void)		\
-{									\
-	return (atomic_read(variable) > 0 ? true : false);	\
-}
-
-is_enabled_func(&hotplug_tuners_ins.hotplug_enable);
-#endif
-
 #define show_hotplug_param(file_name, num_core, up_down)		\
 static ssize_t show_##file_name##_##num_core##_##up_down		\
 (struct kobject *kobj, struct attribute *attr, char *buf)		\
@@ -724,6 +713,19 @@ static void hotplug_work_fn(struct work_struct *work)
 	mutex_unlock(&timer_mutex);
 }
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+static bool is_enabled (void)
+{
+	return (atomic_read(&hotplug_tuners_ins.hotplug_enable) > 0 ? true : false);
+}
+
+static struct hotplugger_driver hotplugger_handler = {
+	.name="alucard_hotplug",
+	.change_state=&cpus_hotplugging,
+	.is_enabled=&is_enabled,
+};
+#endif
+
 int __init alucard_hotplug_init(void)
 {
 	/* We want all CPUs to do sampling nearly on same jiffy */
@@ -732,11 +734,7 @@ int __init alucard_hotplug_init(void)
 	int ret;
 
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
-	hotplugger_handler = (struct hotplugger_driver)  {
-		.name="alucard_hotplug",
-		.change_state=&cpus_hotplugging,
-		.is_enabled=&is_enabled,
-	};
+	hotplugger_register_driver(&hotplugger_handler);
 #endif
 
 	ret = sysfs_create_group(kernel_kobj, &alucard_hotplug_attr_group);
@@ -751,6 +749,7 @@ int __init alucard_hotplug_init(void)
 	}
 
 	if (atomic_read(&hotplug_tuners_ins.hotplug_enable) > 0) {
+		hotplugger_disable_conflicts(&hotplugger_handler);
 		start_rq_work();
 	}
 
@@ -775,9 +774,6 @@ int __init alucard_hotplug_init(void)
 	INIT_WORK(&alucard_hotplug_offline_work, cpu_offline_work_fn);
 	schedule_delayed_work(&alucard_hotplug_work, delay);
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	hotplugger_register_driver(&hotplugger_handler);
-#endif
 	return ret;
 }
 
