@@ -58,7 +58,7 @@ static struct delayed_work intelli_plug_boost;
 static struct workqueue_struct *intelliplug_wq;
 static struct workqueue_struct *intelliplug_boost_wq;
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
-struct hotplugger_driver intelli_plug_hotplug_handler;
+static struct hotplugger_driver intelli_plug_hotplug_handler;
 #endif
 
 static unsigned int intelli_plug_active = 0;
@@ -628,19 +628,20 @@ static struct input_handler intelli_plug_input_handler = {
 	.id_table       = intelli_plug_ids,
 };
 
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+static struct hotplugger_driver intelli_plug_hotplug_handler = {
+	.name = "intelli_plug",
+	.change_state = &change_state,
+	.is_enabled = &is_enabled,
+};
+#endif
+
 int __init intelli_plug_init(void)
 {
 	int rc;
 #if defined (CONFIG_POWERSUSPEND) || defined(CONFIG_HAS_EARLYSUSPEND)
 	struct cpufreq_policy *policy;
 	struct ip_cpu_info *l_ip_info;
-#endif
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	intelli_plug_hotplug_handler = (struct hotplugger_driver) {
-		.name = "intelli_plug",
-		.change_state = &change_state,
-		.is_enabled = &is_enabled,
-	};
 #endif
 	nr_possible_cores = num_possible_cpus();
 
@@ -672,6 +673,8 @@ int __init intelli_plug_init(void)
 #endif
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
 	hotplugger_register_driver(&intelli_plug_hotplug_handler);
+	if (is_enabled())
+		hotplugger_disable_conflicts(&intelli_plug_hotplug_handler);
 #endif
 	intelliplug_wq = alloc_workqueue("intelliplug",
 				WQ_HIGHPRI | WQ_UNBOUND, 1);
