@@ -59,10 +59,6 @@
 #include <linux/sched.h>
 #include <linux/tick.h>
 #include <linux/version.h>
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-#include <linux/hotplugger.h>
-#endif /* CONFIG_HOTPLUGGER_INTERFACE */
-
 
 // #define ENABLE_SNAP_THERMAL_SUPPORT		// ZZ: Snapdragon temperature tripping support
 
@@ -86,6 +82,10 @@
 
 // ZZ: enable/disable hotplug support
 #define ENABLE_HOTPLUGGING
+
+#if defined(CONFIG_HOTPLUGGER_INTERFACE) && defined(ENABLE_HOTPLUGGING)
+#include <linux/hotplugger.h>
+#endif /* define(CONFIG_HOTPLUGGER_INTERFACE)... */
 
 // ZZ: enable support for native hotplugging on snapdragon platform
 // #define SNAP_NATIVE_HOTPLUGGING
@@ -418,10 +418,10 @@ static bool temp_inputboost_punch_freq_flag = false;
 #endif /* ENABLE_INPUTBOOSTER */
 #endif /* ENABLE_AUTO_ADJUST_FREQ */
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
+#if defined(CONFIG_HOTPLUGGER_INTERFACE) && defined(ENABLE_HOTPLUGGING)
 static struct hotplugger_driver hotplugger_handler;
 bool zzmoove_isactive(void);
-#endif /* CONFIG_HOTPLUGGER_INTERFACE */
+#endif /* define(CONFIG_HOTPLUGGER_INTERFACE)... */
 
 #ifdef ENABLE_HOTPLUGGING
 // ZZ: hotplug load thresholds array
@@ -8555,10 +8555,10 @@ void zzmoove_suspend(void)
 	evaluate_scaling_order_limit_range(0, 0, suspend_flag, 0, 0);		// ZZ: table order detection and limit optimizations
 #ifdef ENABLE_HOTPLUGGING
 	if (dbs_tuners_ins.disable_hotplug_sleep == 1
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	    && (hotplugger_get_running() == 1 && zzmoove_isactive() == true)
-		&& (hotplugger_get_running() == 0)
-#endif /* CONFIG_HOTPLUGGER_INTERFACE */
+#if defined(CONFIG_HOTPLUGGER_INTERFACE) && defined(ENABLE_HOTPLUGGING)
+	    && ((hotplugger_get_running() == 1 && zzmoove_isactive() == true) // HP: Check if zzmove hotplug is running
+		    || (hotplugger_get_running() == 0))                           // HP: Or if no hotplug drivers are running
+#endif /* define(CONFIG_HOTPLUGGER_INTERFACE)... */
 		) {			// ZZ: enable all cores at suspend if disable hotplug sleep is set
 		enable_cores = 1;
 		queue_work_on(0, dbs_wq, &hotplug_online_work);
@@ -8707,10 +8707,10 @@ void zzmoove_resume(void)
 
 #ifdef ENABLE_HOTPLUGGING
 	if (dbs_tuners_ins.disable_hotplug_sleep == 0
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	    && (hotplugger_get_running() == 1 && zzmoove_isactive() == true)
-		&& (hotplugger_get_running() == 0)
-#endif /* CONFIG_HOTPLUGGER_INTERFACE */
+#if defined(CONFIG_HOTPLUGGER_INTERFACE) && defined(ENABLE_HOTPLUGGING)
+	    && ((hotplugger_get_running() == 1 && zzmoove_isactive() == true)
+		    || (hotplugger_get_running() == 0))
+#endif /* define(CONFIG_HOTPLUGGER_INTERFACE)... */
 	    ) {
 	    enable_cores = 1;
 	    queue_work_on(0, dbs_wq, &hotplug_online_work); // ZZ: enable offline cores to avoid stuttering after resume if hotplugging limit was active
@@ -8803,6 +8803,22 @@ static struct power_suspend __refdata powersave_powersuspend = {
 #endif /* (defined(CONFIG_HAS_EARLYSUSPEND)... */
 #endif /* (defined(CONFIG_HAS_EARLYSUSPEND)... */
 
+#if defined(CONFIG_HOTPLUGGER_INTERFACE) && defined(ENABLE_HOTPLUGGING)
+int	zzmoove_disable_hotplug(bool state) {
+	return store_disable_hotplug(NULL, NULL, state ? "0" : "1", 0);
+}
+
+bool zzmoove_isactive(void){
+	return dbs_tuners_ins.disable_hotplug ? false : true;
+}
+
+static struct hotplugger_driver hotplugger_handler = {
+	.name = "zzmoove",
+	.change_state = zzmoove_disable_hotplug,
+	.is_enabled = zzmoove_isactive,
+};
+#endif /* define(CONFIG_HOTPLUGGER_INTERFACE)... */
+
 static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 				   unsigned int event)
 {
@@ -8817,6 +8833,14 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 
 	switch (event) {
 	case CPUFREQ_GOV_START:
+#if defined(CONFIG_HOTPLUGGER_INTERFACE) && defined(ENABLE_HOTPLUGGING)
+		if (cpu == 0) { /* Although it can handle simultaneous registerations, there would be rare cases of soft-lock */
+			hotplugger_register_driver(&hotplugger_handler);
+			if (zzmoove_isactive())
+				hotplugger_disable_conflicts(&hotplugger_handler);
+		}
+#endif /* define(CONFIG_HOTPLUGGER_INTERFACE)... */
+
 		if ((!cpu_online(cpu)) || (!policy->cur))
 		    return -EINVAL;
 		mutex_lock(&dbs_mutex);
@@ -8936,9 +8960,10 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 			}
 #endif /* ENABLE_INPUTBOOST */
 #if defined(CONFIG_HAS_EARLYSUSPEND) && !defined(USE_LCD_NOTIFIER) && !defined(DISABLE_POWER_MANAGEMENT)
+			if (cpu == 0)
 			register_early_suspend(&_powersave_early_suspend);
 #elif defined(CONFIG_POWERSUSPEND) && !defined(USE_LCD_NOTIFIER) && !defined(DISABLE_POWER_MANAGEMENT) || defined(CONFIG_POWERSUSPEND) && defined(USE_LCD_NOTIFIER) && !defined(DISABLE_POWER_MANAGEMENT)
-// 			if (cpu == 0)
+			if (cpu == 0)
 			register_power_suspend(&powersave_powersuspend);
 #endif /* (defined(CONFIG_HAS_EARLYSUSPEND)... */
 		}
@@ -8955,6 +8980,9 @@ static int cpufreq_governor_dbs(struct cpufreq_policy *policy,
 		if (cpu == 0) {
 		    enable_cores = 1;
 		    queue_work_on(0, dbs_wq, &hotplug_online_work);			// ZZ: enable offline cores
+#if defined(CONFIG_HOTPLUGGER_INTERFACE) && defined(ENABLE_HOTPLUGGING)
+		    hotplugger_unregister_driver(&hotplugger_handler);
+#endif /* define(CONFIG_HOTPLUGGER_INTERFACE)... */
 		}
 #endif /* defined(ENABLE_HOTPLUGGING)... */
 		dbs_timer_exit(this_dbs_info);
@@ -9097,20 +9125,6 @@ struct cpufreq_governor cpufreq_gov_zzmoove = {
 	.owner			= THIS_MODULE,
 };
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-int	zzmoove_disable_hotplug(bool state) {
-	return store_disable_hotplug(NULL, NULL, state ? "0" : "1", 0);
-}
-bool zzmoove_isactive(void){
-	return dbs_tuners_ins.disable_hotplug ? true : false;
-}
-static struct hotplugger_driver hotplugger_handler = {
-	.name = "zzmoove",
-	.change_state = zzmoove_disable_hotplug,
-	.is_enabled = zzmoove_isactive,
-};
-#endif /* CONFIG_HOTPLUGGER_INTERFACE */
-
 static int __init cpufreq_gov_dbs_init(void)						// ZZ: idle exit time handling
 {
     unsigned int i;
@@ -9140,10 +9154,6 @@ static int __init cpufreq_gov_dbs_init(void)						// ZZ: idle exit time handling
     INIT_WORK(&work_restartloop, zz_restartloop_work);
 #endif /* ENABLE_WORK_RESTARTLOOP */
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	hotplugger_register_driver(&hotplugger_handler);
-	hotplugger_disable_conflicts(&hotplugger_handler);
-#endif /* CONFIG_HOTPLUGGER_INTERFACE */
 
 #ifdef ENABLE_HOTPLUGGING
     INIT_WORK(&hotplug_offline_work, hotplug_offline_work_fn);				// ZZ: init hotplug offline work
@@ -9168,10 +9178,6 @@ static void __exit cpufreq_gov_dbs_exit(void)
 #ifdef ENABLE_WORK_RESTARTLOOP
 	destroy_workqueue(dbs_aux_wq);
 #endif /* ENABLE_WORK_RESTARTLOOP */
-
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	hotplugger_unregister_driver(&hotplugger_handler);
-#endif /* CONFIG_HOTPLUGGER_INTERFACE */
 
 #if (defined(USE_LCD_NOTIFIER) && !defined(CONFIG_POWERSUSPEND))
 	lcd_unregister_client(&zzmoove_lcd_notif);
