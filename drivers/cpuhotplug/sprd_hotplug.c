@@ -45,9 +45,11 @@ static unsigned long boot_done;
 static struct delayed_work plugin_work;
 static struct delayed_work unplug_work;
 
+unsigned bool cpu_hotplug_disable_set = false;
+
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
 static struct hotplugger_driver hotplugger_handle;
-is_not_enabled_func(g_sd_tuners->cpu_hotplug_disable);
+is_not_enabled_func(cpu_hotplug_disable_set);
 #endif
 
 u64 g_prev_cpu_wall[4] = {0};
@@ -83,7 +85,7 @@ static void __cpuinit sprd_plugin_one_cpu_ss(struct work_struct *work)
 
 	if (num_online_cpus() < g_sd_tuners->cpu_num_limit) {
 		cpuid = cpumask_next_zero(0, cpu_online_mask);
-		if (!g_sd_tuners->cpu_hotplug_disable) {
+		if (!cpu_hotplug_disable_set) {
 			pr_info("!!  we gonna plugin cpu%d  !!\n", cpuid);
 			for (i = 0; i < 5; i++) {
 				ret = cpu_up(cpuid);
@@ -102,7 +104,7 @@ static void sprd_unplug_one_cpu_ss(struct work_struct *work)
 
 #ifdef CONFIG_HOTPLUG_CPU
 	if (num_online_cpus() > 1) {
-		if (!g_sd_tuners->cpu_hotplug_disable) {
+		if (!cpu_hotplug_disable_set) {
 			cpuid = cpumask_next(0, cpu_online_mask);
 			pr_info("!!  we gonna unplug cpu%d  !!\n",cpuid);
 			cpu_down(cpuid);
@@ -129,7 +131,7 @@ static int toggle_cpuhotplug(bool state) {
 		if (state)
 			hotplugger_disable_conflicts(&hotplugger_handle);
 #endif
-		g_sd_tuners->cpu_hotplug_disable = !state;
+		cpu_hotplug_disable_set = !state;
 	}
 
 	smp_wmb();
@@ -137,7 +139,7 @@ static int toggle_cpuhotplug(bool state) {
 	 * enable CPU_DYNAMIC_HOTPLUG
 	 */
 #ifdef CONFIG_HOTPLUG_CPU
-	if (g_sd_tuners->cpu_hotplug_disable) {
+	if (cpu_hotplug_disable_set) {
 #ifdef CPU_HOTPLUG_DISABLE_WQ
 		atomic_set(&hotplug_disable_state, HOTPLUG_DISABLE_ACTION_ACTIVE);
 		schedule_delayed_work_on(0, &plugin_work, 0);
@@ -169,7 +171,7 @@ void sd_check_cpu_sprd(unsigned int load)
 	if(time_before(jiffies, boot_done))
 		return;
 
-	if(g_sd_tuners->cpu_hotplug_disable)
+	if(cpu_hotplug_disable_set)
 		return;
 
 	/* cpu plugin check */
@@ -462,7 +464,7 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 
 static ssize_t show_cpu_hotplug_disable(struct device *dev, struct device_attribute *attr,char *buf)
 {
-	snprintf(buf,10,"%d\n",g_sd_tuners->cpu_hotplug_disable);
+	snprintf(buf,10,"%d\n",cpu_hotplug_disable_set);
 	return strlen(buf) + 1;
 }
 
@@ -587,6 +589,7 @@ static int __init sprd_hotplug_init(void)
 		.change_state=&toggle_cpuhotplug,
 		.is_enabled=&is_enabled,
 	};
+	hotplugger_register_driver(&hotplugger_handle);
 #endif
 
 	boot_done = jiffies + CPU_HOTPLUG_BOOT_DONE_TIME;
@@ -595,6 +598,11 @@ static int __init sprd_hotplug_init(void)
 		g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
 	
 	sd_tuners_init(g_sd_tuners);
+
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+	if (cpu_hotplug_disable_set == 0)
+		hotplugger_disable_conflicts(&hotplugger_handle);
+#endif
 
 	INIT_DELAYED_WORK(&plugin_work, sprd_plugin_one_cpu_ss);
 	INIT_DELAYED_WORK(&unplug_work, sprd_unplug_one_cpu_ss);
@@ -622,9 +630,10 @@ static int __init sprd_hotplug_init(void)
 		pr_err("%s: Failed to add kobject for hotplug\n", __func__);
 	}
 
-#ifdef CONFIG_HOTPLUGGER_INTERFACE
-	hotplugger_register_driver(&hotplugger_handle);
-#endif
+	ret = input_register_handler(&dbs_input_handler);
+	if (ret) {
+		pr_err("%s: Failed to register input handler\n", __func__);
+	}
 
 	return 0;
 }
