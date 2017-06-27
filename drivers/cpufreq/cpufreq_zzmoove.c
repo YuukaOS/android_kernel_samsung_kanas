@@ -2596,7 +2596,7 @@ static inline u64 get_cpu_idle_time_jiffy(unsigned int cpu, u64 *wall)
 #endif /* LINUX_VERSION_CODE... */
 
 // ZZ: compatibility with kernel version lower than 3.4
-#if LINUX_VERSION_CODE <= KERNEL_VERSION(3,10,105)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(3,4,0)
 static inline u64 get_cpu_idle_time(unsigned int cpu, u64 *wall, int io_busy)
 {
 	u64 idle_time = get_cpu_idle_time_us(cpu, io_busy ? wall : NULL);
