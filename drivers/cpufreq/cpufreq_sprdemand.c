@@ -758,6 +758,8 @@ static void sd_check_cpu(int cpu, unsigned int load)
 		goto plug_check;
 	}
 
+	cpufreq_notify_utilization(policy, load);
+
 	dbs_info->freq_lo = 0;
 
     /* Check for frequency increase */

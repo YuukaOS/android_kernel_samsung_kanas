@@ -63,7 +63,7 @@ obj-$(CONFIG_NFC_PN547)         += pn547.o
 obj-y		+= sprd_2351/
 obj-$(CONFIG_CGX)		+= gpsip/
 obj-$(CONFIG_TROUT_FM)		+= trout_fm/
-
+obj-$(CONFIG_UID_CPUTIME) += uid_cputime.o
 obj-y		+= sprd_vsp/
 obj-y		+= sprd_jpg/
 obj-y		+= sprd_cproc/

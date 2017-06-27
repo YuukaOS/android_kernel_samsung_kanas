@@ -64,6 +64,9 @@ static cpumask_t speedchange_cpumask;
 static spinlock_t speedchange_cpumask_lock;
 static struct mutex gov_lock;
 
+/* Sampling down factor to be applied to min_sample_time at max freq */
+static unsigned int sampling_down_factor;
+
 /* Target load.  Lower values result in higher CPU speeds. */
 #define DEFAULT_TARGET_LOAD 90
 static unsigned int default_target_loads[] = {DEFAULT_TARGET_LOAD};
@@ -121,44 +124,6 @@ struct cpufreq_interactive_tunables {
 static struct cpufreq_interactive_tunables *common_tunables;
 
 static struct attribute_group *get_sysfs_attr(void);
-
-static inline cputime64_t get_cpu_idle_time_jiffy(unsigned int cpu,
-						  cputime64_t *wall)
-{
-	u64 idle_time;
-	u64 cur_wall_time;
-	u64 busy_time;
-
-	cur_wall_time = jiffies64_to_cputime64(get_jiffies_64());
-
-	busy_time  = kcpustat_cpu(cpu).cpustat[CPUTIME_USER];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SYSTEM];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_IRQ];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_SOFTIRQ];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_STEAL];
-	busy_time += kcpustat_cpu(cpu).cpustat[CPUTIME_NICE];
-
-	idle_time = cur_wall_time - busy_time;
-	if (wall)
-		*wall = jiffies_to_usecs(cur_wall_time);
-
-	return jiffies_to_usecs(idle_time);
-}
-
-static inline cputime64_t get_cpu_idle_time(
-	unsigned int cpu,
-	cputime64_t *wall,
-	bool io_is_busy)
-{
-	u64 idle_time = get_cpu_idle_time_us(cpu, wall);
-
-	if (idle_time == -1ULL)
-		idle_time = get_cpu_idle_time_jiffy(cpu, wall);
-	else if (!io_is_busy)
-		idle_time += get_cpu_iowait_time_us(cpu, wall);
-
-	return idle_time;
-}
 
 static void cpufreq_interactive_timer_resched(
 	struct cpufreq_interactive_cpuinfo *pcpu)
@@ -232,6 +197,8 @@ static unsigned int freq_to_above_hispeed_delay(
 		;
 
 	ret = tunables->above_hispeed_delay[i];
+	ret = (ret > (1 * USEC_PER_MSEC)) ? (ret - (1 * USEC_PER_MSEC)) : ret;
+
 	spin_unlock_irqrestore(&tunables->above_hispeed_delay_lock, flags);
 	return ret;
 }
@@ -385,6 +352,7 @@ static void cpufreq_interactive_timer(unsigned long data)
 	unsigned int loadadjfreq;
 	unsigned int index;
 	unsigned long flags;
+	unsigned long mod_min_sample_time;
 
 	if (!down_read_trylock(&pcpu->enable_sem))
 		return;
@@ -448,9 +416,14 @@ static void cpufreq_interactive_timer(unsigned long data)
 	 * Do not scale below floor_freq unless we have been at or above the
 	 * floor frequency for the minimum sample time since last validated.
 	 */
+	if (pcpu->policy->cur == pcpu->policy->max) {
+		mod_min_sample_time = sampling_down_factor;
+	} else {
+		mod_min_sample_time = tunables->min_sample_time;
+	}
+
 	if (new_freq < pcpu->floor_freq) {
-		if (now - pcpu->floor_validate_time <
-				tunables->min_sample_time) {
+		if (now - pcpu->floor_validate_time < mod_min_sample_time) {
 			trace_cpufreq_interactive_notyet(
 				data, cpu_load, pcpu->target_freq,
 				pcpu->policy->cur, new_freq);
@@ -855,6 +828,30 @@ static ssize_t store_hispeed_freq(struct cpufreq_interactive_tunables *tunables,
 	return count;
 }
 
+static ssize_t show_sampling_down_factor(struct kobject *kobj,
+				struct attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", sampling_down_factor);
+}
+
+static ssize_t store_sampling_down_factor(struct kobject *kobj,
+				struct attribute *attr, const char *buf,
+				size_t count)
+{
+	int ret;
+	long unsigned int val;
+
+	ret = strict_strtoul(buf, 0, &val);
+	if (ret < 0)
+		return ret;
+	sampling_down_factor = val;
+	return count;
+}
+
+static struct global_attr sampling_down_factor_attr =
+				__ATTR(sampling_down_factor, 0644,
+		show_sampling_down_factor, store_sampling_down_factor);
+
 static ssize_t show_go_hispeed_load(struct cpufreq_interactive_tunables
 		*tunables, char *buf)
 {
@@ -1130,6 +1127,7 @@ static struct attribute *interactive_attributes_gov_pol[] = {
 	&boostpulse_gov_pol.attr,
 	&boostpulse_duration_gov_pol.attr,
 	&io_is_busy_gov_pol.attr,
+	&sampling_down_factor_attr.attr,
 	NULL,
 };
 

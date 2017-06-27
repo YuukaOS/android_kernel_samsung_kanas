@@ -35,6 +35,11 @@
 #include "mali_kernel_common.h"
 #include "base.h"
 
+#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
+#include <linux/cpufreq_elementalx.h>
+int graphics_boost = 3;
+#endif
+
 #define GPU_GLITCH_FREE_DFS 0
 #define GPU_FIX_312MHZ	1
 
@@ -400,6 +405,11 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 	unsigned int utilization = data->utilization_gpu;
 	MALI_DEBUG_PRINT(3,("GPU_DFS mali_utilization  gpu:%d  gp:%d pp:%d\n",data->utilization_gpu,data->utilization_gp,data->utilization_pp));
 	MALI_DEBUG_PRINT(3,("GPU_DFS  gpu_level:%d\n",gpu_level));
+
+#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
+	graphics_boost = gpu_level;
+#endif
+
 	switch(gpu_level)
 	{
 		case 3:
