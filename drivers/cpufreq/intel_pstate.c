@@ -628,7 +628,7 @@ static int intel_pstate_verify_policy(struct cpufreq_policy *policy)
 	return 0;
 }
 
-static int intel_pstate_cpu_exit(struct cpufreq_policy *policy)
+static int __cpuinit intel_pstate_cpu_exit(struct cpufreq_policy *policy)
 {
 	int cpu = policy->cpu;
 
@@ -638,7 +638,7 @@ static int intel_pstate_cpu_exit(struct cpufreq_policy *policy)
 	return 0;
 }
 
-static int intel_pstate_cpu_init(struct cpufreq_policy *policy)
+static int __cpuinit intel_pstate_cpu_init(struct cpufreq_policy *policy)
 {
 	struct cpudata *cpu;
 	int rc;
