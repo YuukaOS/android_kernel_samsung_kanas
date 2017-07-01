@@ -20,9 +20,9 @@
 /* elementalx governor macros */
 #define DEF_FREQUENCY_UP_THRESHOLD		(90)
 #define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(20)
-#define DEF_ACTIVE_FLOOR_FREQ			(960000)
-#define DEF_GBOOST_MIN_FREQ			(1574400)
-#define DEF_MAX_SCREEN_OFF_FREQ			(2265000)
+#define DEF_ACTIVE_FLOOR_FREQ			(1000000)
+#define DEF_GBOOST_MIN_FREQ			(600000)
+#define DEF_MAX_SCREEN_OFF_FREQ			(1200000)
 #define MIN_SAMPLING_RATE			(10000)
 #define DEF_SAMPLING_DOWN_FACTOR		(8)
 #define MAX_SAMPLING_DOWN_FACTOR		(20)
@@ -513,7 +513,7 @@ static int ex_init(struct dbs_data *dbs_data)
 	tuners->up_threshold = DEF_FREQUENCY_UP_THRESHOLD;
 	tuners->down_differential = DEF_FREQUENCY_DOWN_DIFFERENTIAL;
 	tuners->ignore_nice_load = 0;
-	tuners->gboost = 1;
+	tuners->gboost = 0;
 	tuners->gboost_min_freq = DEF_GBOOST_MIN_FREQ;
 	tuners->active_floor_freq = DEF_ACTIVE_FLOOR_FREQ;
 	tuners->max_screen_off_freq = DEF_MAX_SCREEN_OFF_FREQ;
