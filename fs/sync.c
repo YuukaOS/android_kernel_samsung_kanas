@@ -18,7 +18,7 @@
 #include "internal.h"
 
 #ifdef CONFIG_DYNAMIC_FSYNC
-extern bool power_suspend_active;
+extern bool early_suspend_active;
 extern bool dyn_fsync_active;
 #endif
 
@@ -94,8 +94,6 @@ static void fdatawait_one_bdev(struct block_device *bdev, void *arg)
 	filemap_fdatawait(bdev->bd_inode->i_mapping);
 }
 
-
-#ifdef CONFIG_DYNAMIC_FSYNC
 /*
  * Sync all the data for all the filesystems (called by sys_sync() and
  * emergency sync)
@@ -108,7 +106,7 @@ void sync_filesystems(int wait)
 	iterate_bdevs(fdatawrite_one_bdev, NULL);
 	iterate_bdevs(fdatawait_one_bdev, NULL);
 }
-#endif
+EXPORT_SYMBOL_GPL(sync_filesystems);
 
 /*
  * Sync everything. We start by waking flusher threads so that most of
@@ -199,7 +197,7 @@ SYSCALL_DEFINE1(syncfs, int, fd)
 int vfs_fsync_range(struct file *file, loff_t start, loff_t end, int datasync)
 {
 #ifdef CONFIG_DYNAMIC_FSYNC
-	if (likely(dyn_fsync_active && !power_suspend_active))
+	if (likely(dyn_fsync_active && !early_suspend_active))
 		return 0;
 	else {
 #endif
@@ -242,7 +240,7 @@ static int do_fsync(unsigned int fd, int datasync)
 SYSCALL_DEFINE1(fsync, unsigned int, fd)
 {
 #ifdef CONFIG_DYNAMIC_FSYNC
-	if (likely(dyn_fsync_active && !power_suspend_active))
+	if (likely(dyn_fsync_active && !early_suspend_active))
 		return 0;
 	else
 #endif
@@ -251,6 +249,11 @@ SYSCALL_DEFINE1(fsync, unsigned int, fd)
 
 SYSCALL_DEFINE1(fdatasync, unsigned int, fd)
 {
+#if 0
+	if (likely(dyn_fsync_active && !power_suspend_active))
+		return 0;
+	else
+#endif
 	return do_fsync(fd, 1);
 }
 
@@ -322,7 +325,7 @@ SYSCALL_DEFINE4(sync_file_range, int, fd, loff_t, offset, loff_t, nbytes,
 				unsigned int, flags)
 {
 #ifdef CONFIG_DYNAMIC_FSYNC
-	if (likely(dyn_fsync_active && !power_suspend_active))
+	if (likely(dyn_fsync_active && !early_suspend_active))
 		return 0;
 	else {
 #endif
@@ -415,7 +418,7 @@ SYSCALL_DEFINE4(sync_file_range2, int, fd, unsigned int, flags,
 				 loff_t, offset, loff_t, nbytes)
 {
 #ifdef CONFIG_DYNAMIC_FSYNC
-	if (likely(dyn_fsync_active && !power_suspend_active))
+	if (likely(dyn_fsync_active && !early_suspend_active))
 		return 0;
 	else
 #endif
