@@ -35,11 +35,16 @@
 #include "mali_kernel_common.h"
 #include "base.h"
 
+#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
+#include <linux/cpufreq_elementalx.h>
+int graphics_boost = 8;
+#endif
+
 #define GPU_GLITCH_FREE_DFS	0
-#define GPU_FIX_312MHZ	0
+#define GPU_FIX_312MHZ	1
 
 #define GPU_MIN_DIVISION	1
-#define GPU_MAX_DIVISION	3
+#define GPU_MAX_DIVISION	8
 
 #define GPU_SELECT0_VAL		0
 #define GPU_SELECT0_MAX		208000
@@ -100,7 +105,7 @@ static struct resource mali_gpu_resources[] =
 static struct mali_gpu_device_data mali_gpu_data =
 {
 	.shared_mem_size = ARCH_MALI_MEMORY_SIZE_DEFAULT,
-	.utilization_interval = 300,
+	.utilization_interval = 100,
 	.utilization_callback = mali_platform_utilization,
 };
 
@@ -420,7 +425,7 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 			{
 				gpu_max_freq=GPU_SELECT3_MAX;
 				min_div=GPU_MIN_DIVISION;
-				max_div=GPU_MIN_DIVISION;
+				max_div=GPU_MAX_DIVISION;
 			}
 			else
 			{
@@ -441,7 +446,7 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 			{
 				gpu_max_freq=GPU_SELECT3_MAX;
 				min_div=GPU_MIN_DIVISION;
-				max_div=GPU_MIN_DIVISION;
+				max_div=GPU_MAX_DIVISION;
 			}
 			else
 			{
@@ -465,7 +470,7 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 			{
 				gpu_max_freq=GPU_SELECT3_MAX;
 				min_div=GPU_MIN_DIVISION;
-				max_div=GPU_MIN_DIVISION;
+				max_div=GPU_MAX_DIVISION;
 			}
 			else
 			{
@@ -507,6 +512,9 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 		utilization,old_gpu_clock_div, gpu_clock_div,min_div,max_div,old_mali_freq_select,mali_freq_select));
 	if((gpu_clock_div != old_gpu_clock_div)||(old_mali_freq_select!=mali_freq_select))
 	{
+#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
+		graphics_boost = gpu_clock_div;
+#endif
 #if !GPU_GLITCH_FREE_DFS
 		if(gpu_dfs_workqueue)
 			queue_work(gpu_dfs_workqueue, &gpu_dfs_work);
