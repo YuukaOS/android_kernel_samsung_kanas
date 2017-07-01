@@ -1660,7 +1660,7 @@ static int sd_init(struct dbs_data *dbs_data)
 
 static void sd_exit(struct dbs_data *dbs_data)
 {
-#if defined CONFIG_HOTPLUG_CPU
+#if defined CONFIG_HOTPLUG_CPU && !defined CONFIG_SPRD_CPU_DYNAMIC_HOTPLUG
 	g_sd_tuners = NULL;
 	kfree(dbs_data->tuners);
 #endif
@@ -1746,7 +1746,7 @@ static int set_cur_state(struct thermal_cooling_device *cdev,
 
 	// We assume cpufreq_gov_sprdemand.name is always set to "sprdemand"
 	if(!policy->governor->name ||
-	    (!strcmp(cpufreq_gov_sprdemand.name, policy->governor->name))) {
+	    (strcmp(cpufreq_gov_sprdemand.name, policy->governor->name))) {
 		pr_info("set_cur_state governor %s is not sprdemand\n",
 		        policy->governor->name);
 		return ret;
@@ -1819,7 +1819,7 @@ static int sprdemand_gov_pm_notifier_call(struct notifier_block *nb,
 
 	// We assume cpufreq_gov_sprdemand.name is always set to "sprdemand"
 	if(!policy->governor->name ||
-	    (!strcmp(cpufreq_gov_sprdemand.name, policy->governor->name)))
+	    (strcmp(cpufreq_gov_sprdemand.name, policy->governor->name)))
 	{
 		pr_info("set_cur_state governor %s is not sprdemand\n",
 		        policy->governor->name);
@@ -1874,7 +1874,7 @@ static void sprdemand_gov_late_resume(struct early_suspend *h)
 
 	// We assume cpufreq_gov_sprdemand.name is always set to "sprdemand"
 	if(!policy->governor->name ||
-	    (!strcmp(cpufreq_gov_sprdemand.name, policy->governor->name)))
+	    (strcmp(cpufreq_gov_sprdemand.name, policy->governor->name)))
 	{
 		pr_info("set_cur_state governor %s is not sprdemand\n",
 		        policy->governor->name);
