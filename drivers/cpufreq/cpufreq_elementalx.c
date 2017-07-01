@@ -19,9 +19,9 @@
 /* elementalx governor macros */
 #define DEF_FREQUENCY_UP_THRESHOLD		(90)
 #define DEF_FREQUENCY_DOWN_DIFFERENTIAL		(20)
-#define DEF_ACTIVE_FLOOR_FREQ			(960000)
-#define DEF_GBOOST_MIN_FREQ			(1574400)
-#define DEF_MAX_SCREEN_OFF_FREQ			(2265000)
+#define DEF_ACTIVE_FLOOR_FREQ			(1000000)
+#define DEF_GBOOST_MIN_FREQ			(600000)
+#define DEF_MAX_SCREEN_OFF_FREQ			(1200000)
 #define MIN_SAMPLING_RATE			(10000)
 #define DEF_SAMPLING_DOWN_FACTOR		(8)
 #define MAX_SAMPLING_DOWN_FACTOR		(20)
@@ -166,7 +166,7 @@ static void ex_check_cpu(int cpu, unsigned int load)
 	avg_load = (ex_data.prev_load + load) >> 1;
 
 	if (ex_tuners->gboost) {
-		if (ex_data.g_count < 500 && graphics_boost < 3)
+		if (ex_data.g_count < 500 && graphics_boost < 2)
 			++ex_data.g_count;
 		else if (ex_data.g_count > 1)
 			--ex_data.g_count;
@@ -511,7 +511,7 @@ static int ex_init(struct dbs_data *dbs_data)
 	tuners->up_threshold = DEF_FREQUENCY_UP_THRESHOLD;
 	tuners->down_differential = DEF_FREQUENCY_DOWN_DIFFERENTIAL;
 	tuners->ignore_nice_load = 0;
-	tuners->gboost = 1;
+	tuners->gboost = 0;
 	tuners->gboost_min_freq = DEF_GBOOST_MIN_FREQ;
 	tuners->active_floor_freq = DEF_ACTIVE_FLOOR_FREQ;
 	tuners->max_screen_off_freq = DEF_MAX_SCREEN_OFF_FREQ;
