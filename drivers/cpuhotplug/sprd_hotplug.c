@@ -45,7 +45,7 @@ static unsigned long boot_done;
 static struct delayed_work plugin_work;
 static struct delayed_work unplug_work;
 
-unsigned bool cpu_hotplug_disable_set = false;
+static bool cpu_hotplug_disable_set = true;
 
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
 static struct hotplugger_driver hotplugger_handle;
@@ -445,7 +445,6 @@ static ssize_t show_cpu_down_threshold(struct device *dev, struct device_attribu
 static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device_attribute *attr,const char *buf, size_t count)
 
 {
-	struct sd_dbs_tuners *sd_tuners = g_sd_tuners;
 	unsigned int input;
 	int ret;
 
@@ -455,7 +454,7 @@ static ssize_t __ref store_cpu_hotplug_disable(struct device *dev, struct device
 		return -EINVAL;
 	}
 
-	if (sd_tuners->cpu_hotplug_disable == input) {
+	if (cpu_hotplug_disable_set == input) {
 		return count;
 	}
 	toggle_cpuhotplug(input >= 1 ? false : true);
@@ -594,10 +593,11 @@ static int __init sprd_hotplug_init(void)
 
 	boot_done = jiffies + CPU_HOTPLUG_BOOT_DONE_TIME;
 
-	if (!g_sd_tuners)
+	if (!g_sd_tuners) {
 		g_sd_tuners = kzalloc(sizeof(struct sd_dbs_tuners), GFP_KERNEL);
+		sd_tuners_init(g_sd_tuners);
+	}
 	
-	sd_tuners_init(g_sd_tuners);
 
 #ifdef CONFIG_HOTPLUGGER_INTERFACE
 	if (cpu_hotplug_disable_set == 0)
