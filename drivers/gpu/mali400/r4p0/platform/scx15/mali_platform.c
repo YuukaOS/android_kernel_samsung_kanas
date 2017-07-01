@@ -35,6 +35,10 @@
 #include "mali_kernel_common.h"
 #include "base.h"
 
+#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
+#include <linux/cpufreq_elementalx.h>
+#endif
+
 #define GPU_GLITCH_FREE_DFS 0
 #define GPU_FIX_312MHZ	1
 
@@ -495,6 +499,9 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 		utilization,old_gpu_clock_div, gpu_clock_div,min_div,max_div,old_mali_freq_select,mali_freq_select));
 	if((gpu_clock_div != old_gpu_clock_div)||(old_mali_freq_select!=mali_freq_select))
 	{
+#ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
+		graphics_boost = gpu_max_freq/gpu_clock_div;
+#endif
 #if !GPU_GLITCH_FREE_DFS
 		if(gpu_dfs_workqueue)
 			queue_work(gpu_dfs_workqueue, &gpu_dfs_work);

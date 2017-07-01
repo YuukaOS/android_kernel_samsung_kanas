@@ -36,6 +36,7 @@ static unsigned int up_threshold_level[2] __read_mostly = {95, 85};
 static struct cpufreq_frequency_table *tbl = NULL;
 static unsigned int *tblmap[TABLE_SIZE] __read_mostly;
 static unsigned int tbl_select[4];
+int graphics_boost = 0;
 
 static struct ex_governor_data {
 	unsigned int active_floor_freq;
@@ -166,7 +167,7 @@ static void ex_check_cpu(int cpu, unsigned int load)
 	avg_load = (ex_data.prev_load + load) >> 1;
 
 	if (ex_tuners->gboost) {
-		if (ex_data.g_count < 500 && graphics_boost < 3)
+		if (ex_data.g_count < 500 && graphics_boost == 312000)
 			++ex_data.g_count;
 		else if (ex_data.g_count > 1)
 			--ex_data.g_count;
@@ -175,7 +176,7 @@ static void ex_check_cpu(int cpu, unsigned int load)
 	//gboost mode
 	if (ex_tuners->gboost && ex_data.g_count > 300) {
 				
-		if (avg_load > 40 + (graphics_boost * 10)) {
+		if (avg_load > 40 + ((graphics_boost == 312000)* 40)) {
 			freq_next = max_freq;
 		} else {
 			freq_next = max_freq * avg_load / 100;
