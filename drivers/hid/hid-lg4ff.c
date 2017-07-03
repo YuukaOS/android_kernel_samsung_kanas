@@ -484,6 +484,17 @@ static void lg4ff_set_autocenter_default(struct input_dev *dev, u16 magnitude)
 	value[5] = 0x00;
 	value[6] = 0x00;
 
+	hid_hw_request(hid, report, HID_REQ_SET_REPORT);
+
+	/* Activate Auto-Center */
+	value[0] = 0x14;
+	value[1] = 0x00;
+	value[2] = 0x00;
+	value[3] = 0x00;
+	value[4] = 0x00;
+	value[5] = 0x00;
+	value[6] = 0x00;
+
 	hid_hw_request(hid, entry->report, HID_REQ_SET_REPORT);
 
 	/* Activate Auto-Center */

@@ -880,6 +880,7 @@ static void crypt_io_init(struct dm_crypt_io *io, struct crypt_config *cc,
 	io->sector = sector;
 	io->error = 0;
 	io->ctx.req = NULL;
+	io->ctx.req = NULL;
 	atomic_set(&io->io_pending, 0);
 }
 

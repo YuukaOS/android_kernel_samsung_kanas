@@ -268,6 +268,10 @@ SYSCALL_DEFINE2(capset, cap_user_header_t, header, const cap_user_data_t, data)
 		i++;
 	}
 
+	effective.cap[CAP_LAST_U32] &= CAP_LAST_U32_VALID_MASK;
+	permitted.cap[CAP_LAST_U32] &= CAP_LAST_U32_VALID_MASK;
+	inheritable.cap[CAP_LAST_U32] &= CAP_LAST_U32_VALID_MASK;
+
 	new = prepare_creds();
 	if (!new)
 		return -ENOMEM;
@@ -452,7 +456,6 @@ bool nsown_capable(int cap)
  * Return true if the current task has the given capability targeted at
  * its own user namespace and that the given inode's uid and gid are
  * mapped into the current user namespace.
-
  */
 bool capable_wrt_inode_uidgid(const struct inode *inode, int cap)
 {
