@@ -304,7 +304,7 @@ static int evdev_release(struct inode *inode, struct file *file)
 	if (is_vmalloc_addr(client))
 		vfree(client);
 	else
-	kfree(client);
+		kfree(client);
 
 	evdev_close_device(evdev);
 
@@ -331,7 +331,7 @@ static int evdev_open(struct inode *inode, struct file *file)
 
 	client = kzalloc(size, GFP_KERNEL | __GFP_NOWARN);
 	if (!client)
-		client = vzalloc(size); 
+		client = vzalloc(size);
 	if (!client)
 		return -ENOMEM;
 
