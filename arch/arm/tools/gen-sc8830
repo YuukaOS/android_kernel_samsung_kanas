@@ -1,0 +1,71 @@
+#!/bin/bash
+#
+#   Generates a cpufreq frequency and voltage table
+#
+
+#This has to sorted in ascending order
+table=(
+#      Hz  Norm V. Under V.
+    "100000 875000 875000"
+    "200000 950000 900000"
+    "300000 1000000 910000"
+    "400000 1050000 920000"
+    "500000 1075000 930000"
+    "600000 1100000 940000"
+    "700000 1125000 950000"
+    "768000 1150000 1000000"
+    "800000 1172500 1000000"
+    "900000 1172500  1050000"
+    "1000000 1200000 1100000"
+    "1100000 1250000 1150000"
+    "1200000 1300000 1200000"
+    "1300000 1350000 1250000"
+    "1400000 1350000 1300000"
+)
+
+#Load .config; it's a hack though
+. .config
+
+indent="\t\t"
+i=0
+for ((j = ${#table[@]}; j--; )); do
+    table_elem=(${table[$j]})
+    freq_mhz=${table_elem[0]}
+    freq_volt=${table_elem[1]}
+    freq_undervolt=${table_elem[2]}
+    freq_conf="CONFIG_SC8830_CUSTOM_$freq_mhz"
+    freq_conf_uv=${freq_conf}"_UV"
+
+    if [ "${!freq_conf}" = "y" ]; then
+        freq_tbl+=$(echo -e "${indent}{${i}, ${freq_mhz}},")
+        if [ "${!freq_conf_uv}" = "y" ]; then
+            vddarm_mv+=$(echo -e "${indent}${freq_undervolt}," )
+        else
+            vddarm_mv+=$(echo -e "${indent}${freq_volt}," )
+        fi
+        indent="\n\t\t"
+        ((i++))
+    fi
+done
+
+echo "/*"
+echo " * Automatically generated C header"
+echo " */"
+echo
+echo "#ifndef __ARCH_ARM_MACH_CPUFREQ_SCX35_H"
+echo "#define __ARCH_ARM_MACH_CPUFREQ_SCX35_H"
+echo "#ifdef CONFIG_SC8830_CUSTOM_FREQ"
+echo
+echo "struct cpufreq_table_data sc8830_cpufreq_table_data_cs = {"
+echo "	.freq_tbl = {"
+echo 		"${freq_tbl}"
+echo "		{${i}, CPUFREQ_TABLE_END},"
+echo "	},"
+echo "	.vddarm_mv = {"
+echo 		"${vddarm_mv}"
+echo "		875000,"
+echo "	},"
+echo "};"
+echo
+echo "#endif /* CONFIG_SC8830_CUSTOM_FREQ */"
+echo "#endif /* __ARCH_ARM_MACH_CPUFREQ_SCX35_H */"

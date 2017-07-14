@@ -293,6 +293,9 @@ boot := arch/arm/boot
 
 archprepare:
 	$(Q)$(MAKE) $(build)=arch/arm/tools include/generated/mach-types.h
+ifeq ($(CONFIG_SC8830_CUSTOM_FREQ),y)
+	$(Q)$(MAKE) $(build)=arch/arm/tools include/generated/freq_volt_table.h
+endif
 
 # Convert bzImage to zImage
 bzImage: zImage

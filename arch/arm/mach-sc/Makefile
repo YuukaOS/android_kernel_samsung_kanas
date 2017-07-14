@@ -13,6 +13,9 @@ obj-$(CONFIG_PM_DEVFREQ) += dmc_freq.o
 
 obj-$(CONFIG_PM) += pm.o
 obj-$(CONFIG_FIX_V7TAGRAM_BUG) += fix_v7_tag_ram_bug.o
+ifdef CONFIG_SC8830_CUSTOM_FREQ
+$(obj)/cpufreq-scx35.o: include/generated/freq_volt_table.h
+endif
 obj-$(CONFIG_CPU_FREQ) += cpufreq-scx35.o
 
 obj-$(CONFIG_SEC_DEBUG) += sec_debug.o sec_gaf.o sec_getlog.o sec-reboot.o

@@ -48,7 +48,7 @@
 #define GR_GEN1			(REG_GLB_GEN1)
 #endif
 
-#define FREQ_TABLE_SIZE 	10
+#define FREQ_TABLE_SIZE 	16
 #define DVFS_BOOT_TIME	(30 * HZ)
 #define SHARK_TDPLL_FREQUENCY	(768000)
 #define TRANSITION_LATENCY	(100 * 1000) /* ns */
@@ -72,6 +72,10 @@ struct cpufreq_table_data {
 	struct cpufreq_frequency_table 		freq_tbl[FREQ_TABLE_SIZE];
 	unsigned int				vddarm_mv[FREQ_TABLE_SIZE];
 };
+
+#ifdef CONFIG_SC8830_CUSTOM_FREQ
+#include <generated/freq_volt_table.h>
+#endif
 
 struct cpufreq_conf *sprd_cpufreq_conf = NULL;
 
@@ -163,6 +167,7 @@ static unsigned int get_mcu_clk_freq(void)
 }
 #endif
 
+#ifndef CONFIG_SC8830_CUSTOM_FREQ
 static struct cpufreq_table_data sc8830_cpufreq_table_data_cs = {
 	.freq_tbl = {
 		{0, 1200000},
@@ -187,6 +192,7 @@ static struct cpufreq_table_data sc8830_cpufreq_table_data_cs = {
 		1000000,
 	},
 };
+#endif
 
 /*
 for 7715 test
