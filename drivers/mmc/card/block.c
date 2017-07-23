@@ -1955,6 +1955,11 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 		mmc_resume_bus(card->host);
 #endif
 
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+	if (mmc_bus_needs_resume(card->host))
+		mmc_resume_bus(card->host);
+#endif
+
 	if (req && !mq->mqrq_prev->req)
 		/* claim host only for the first request */
 		mmc_claim_host(card->host);
