@@ -25,8 +25,6 @@ source "drivers/gpu/sprd_iommu/Kconfig"
 
 source "drivers/gpu/host1x/Kconfig"
 
-source "drivers/gpu/ion/Kconfig"
-
 config VGASTATE
        tristate
        default n
