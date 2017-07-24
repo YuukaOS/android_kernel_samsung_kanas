@@ -1,9 +1,10 @@
 /*
- *  Key chord input driver
+ * include/linux/wakeup_reason.h
  *
- * Copyright (C) 2008 Google, Inc.
- * Author: Mike Lockwood <lockwood@android.com>
+ * Logs the reason which caused the kernel to resume
+ * from the suspend mode.
  *
+ * Copyright (C) 2014 Google, Inc.
  * This software is licensed under the terms of the GNU General Public
  * License version 2, as published by the Free Software Foundation, and
  * may be copied, distributed, and modified under those terms.
@@ -12,12 +13,11 @@
  * but WITHOUT ANY WARRANTY; without even the implied warranty of
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
- *
-*/
+ */
 
-#ifndef __LINUX_KEYCHORD_H_
-#define __LINUX_KEYCHORD_H_
+#ifndef _LINUX_WAKEUP_REASON_H
+#define _LINUX_WAKEUP_REASON_H
 
-#include <uapi/linux/keychord.h>
+void log_wakeup_reason(int irq);
 
-#endif	/* __LINUX_KEYCHORD_H_ */
+#endif /* _LINUX_WAKEUP_REASON_H */

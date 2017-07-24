@@ -53,7 +53,6 @@
 #include <net/transp_v6.h>
 #endif
 
-
 struct ping_table ping_table;
 struct pingv6_ops pingv6_ops;
 EXPORT_SYMBOL_GPL(pingv6_ops);

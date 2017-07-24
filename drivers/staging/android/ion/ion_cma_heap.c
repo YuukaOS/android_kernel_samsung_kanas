@@ -69,6 +69,13 @@ static int ion_cma_allocate(struct ion_heap *heap, struct ion_buffer *buffer,
 
 	dev_dbg(dev, "Request buffer allocation len %ld\n", len);
 
+/* Sounds good, doesn't work. Always results to -EINVAL
+	if (buffer->flags & ION_FLAG_CACHED)
+		return -EINVAL;
+
+	if (align > PAGE_SIZE)
+		return -EINVAL;
+*/
 	info = kzalloc(sizeof(struct ion_cma_buffer_info), GFP_KERNEL);
 	if (!info) {
 		dev_err(dev, "Can't allocate buffer info\n");
