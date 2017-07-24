@@ -45,6 +45,9 @@
 #include <linux/swap.h>
 #include <linux/fs.h>
 
+#define CREATE_TRACE_POINTS
+#include "trace/lowmemorykiller.h"
+
 #define LMK_COUNT_READ
 #ifdef CONFIG_SEC_DEBUG_LMK_COUNT_INFO
 #define OOM_COUNT_READ
@@ -343,6 +346,10 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     p->comm, p->pid, OOM_SCORE_ADJ_TO_OOM_ADJ(oom_score_adj), tasksize);
 	}
 	if (selected) {
+		long cache_size = other_file * (long)(PAGE_SIZE / 1024);
+		long cache_limit = minfree * (long)(PAGE_SIZE / 1024);
+		long free = other_free * (long)(PAGE_SIZE / 1024);
+		trace_lowmemory_kill(selected, cache_size, cache_limit, free);
 		lowmem_print(1, "Killing '%s' (%d), adj %hd,\n" \
 				"   to free %ldkB on behalf of '%s' (%d) because\n" \
 				"   cache %ldkB is below limit %ldkB for oom_score_adj %hd\n" \
@@ -351,10 +358,9 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     OOM_SCORE_ADJ_TO_OOM_ADJ(selected_oom_score_adj),
 			     selected_tasksize * (long)(PAGE_SIZE / 1024),
 			     current->comm, current->pid,
-			     other_file * (long)(PAGE_SIZE / 1024),
-			     minfree * (long)(PAGE_SIZE / 1024),
+			     cache_size, cache_limit,
 			     OOM_SCORE_ADJ_TO_OOM_ADJ(min_score_adj),
-			     other_free * (long)(PAGE_SIZE / 1024));
+			     free);
 		lowmem_deathpending_timeout = jiffies + HZ;
 		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
