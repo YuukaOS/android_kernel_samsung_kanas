@@ -362,7 +362,6 @@ static int lowmem_shrink(struct shrinker *s, struct shrink_control *sc)
 			     OOM_SCORE_ADJ_TO_OOM_ADJ(min_score_adj),
 			     free);
 		lowmem_deathpending_timeout = jiffies + HZ;
-		send_sig(SIGKILL, selected, 0);
 		set_tsk_thread_flag(selected, TIF_MEMDIE);
 		rem -= selected_tasksize;
 		rcu_read_unlock();
