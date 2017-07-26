@@ -40,7 +40,11 @@ extern int sec_touch_sysfs(struct ist30xx_data *data);
 extern int sec_fac_cmd_init(struct ist30xx_data *data);
 #endif
 
+#ifdef CONFIG_TOUCHSCREEN_IST3038_TOUCHBOOST
+#define TOUCH_BOOSTER	1
+#else
 #define TOUCH_BOOSTER	0
+#endif
 #define MAX_ERR_CNT             (100)
 
 #if TOUCH_BOOSTER
