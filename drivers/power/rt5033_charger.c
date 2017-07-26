@@ -31,7 +31,7 @@
 
 #define EOC_DEBOUNCE_CNT 3
 
-extern int system_rev;
+//extern int system_rev;
 static int rt5033_reg_map[] = {
 	RT5033_CHG_STAT_CTRL,
 	RT5033_CHG_CTRL1,

@@ -30,7 +30,7 @@
  * 1. BATTERY_VOL_PATH	"/sys/class/power_supply/battery/real_time_voltage"
  * 2. BATTERY_ADC_PATH	"/sys/class/power_supply/battery/real_time_vbat_adc"
  */
-extern int system_rev;
+//extern int system_rev;
 extern uint32_t sprdchg_read_vbat_vol(void);
 #else
 #error "please include sprd sc2713 interface"
