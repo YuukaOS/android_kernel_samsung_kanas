@@ -273,7 +273,7 @@ static int gfs2_xattr_system_set(struct dentry *dentry, const char *name,
 
 		if (!acl)
 			posix_acl_release(old_acl);
-		if (error)
+		if (error < 0)
 			goto out_release;
 
 		error = gfs2_set_mode(inode, mode);
