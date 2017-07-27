@@ -435,7 +435,7 @@ config HOTPLUGGER_INTERFACE
 	   This also has a primitive black/whitelisting
 	   to prevent incompatible modules from running
 	   at the same time and causing instability and/or panics.
-
+	   
 	   You could read this for more info <file:Documentation/hotpugger.txt>
 
 config HOTPLUGGER_INTERFACE_DEBUG
