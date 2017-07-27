@@ -1702,7 +1702,15 @@ static int set_cur_state(struct thermal_cooling_device *cdev,
 	struct dbs_data *dbs_data = policy->governor_data;
 	struct sd_dbs_tuners *sd_tuners = NULL;
 
-	if(NULL == dbs_data)
+	// We assume cpufreq_gov_sprdemand.name is always set to "sprdemand"
+	if(!policy->governor->name ||
+	  (strcmp(cpufreq_gov_sprdemand.name, policy->governor->name)))
+	{
+		pr_info("%s: %s is not sprdemand\n", __func__,
+		        policy->governor->name);
+		return ret;
+	}
+	else if(NULL == dbs_data)
 	{
 		pr_info("set_cur_state governor %s return\n", policy->governor->name);
 		if (g_sd_tuners == NULL)
@@ -1765,7 +1773,15 @@ static int sprdemand_gov_pm_notifier_call(struct notifier_block *nb,
 	struct dbs_data *dbs_data = policy->governor_data;
 	struct sd_dbs_tuners *sd_tuners = NULL;
 
-	if(NULL == dbs_data)
+	// We assume cpufreq_gov_sprdemand.name is always set to "sprdemand"
+	if(!policy->governor->name ||
+	  (strcmp(cpufreq_gov_sprdemand.name, policy->governor->name)))
+	{
+		pr_info("%s: %s is not sprdemand\n", __func__,
+		        policy->governor->name);
+		return NOTIFY_OK;
+	}
+	else if(NULL == dbs_data)
 	{
 		pr_info("sprdemand_gov_pm_notifier_call governor %s return\n", policy->governor->name);
 		if (g_sd_tuners == NULL)
@@ -1809,7 +1825,15 @@ static void sprdemand_gov_late_resume(struct early_suspend *h)
 	struct dbs_data *dbs_data = policy->governor_data;
 	struct sd_dbs_tuners *sd_tuners = NULL;
 
-	if(NULL == dbs_data)
+	// We assume cpufreq_gov_sprdemand.name is always set to "sprdemand"
+	if(!policy->governor->name ||
+	  (strcmp(cpufreq_gov_sprdemand.name, policy->governor->name)))
+	{
+		pr_info("%s: %s is not sprdemand\n", __func__,
+		        policy->governor->name);
+		return;
+	}
+	else if(NULL == dbs_data)
 	{
 		pr_info("sprdemand_gov_late_resume governor %s return\n", policy->governor->name);
 		if (g_sd_tuners == NULL)
