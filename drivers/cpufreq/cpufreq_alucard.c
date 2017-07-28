@@ -439,16 +439,15 @@ static void alucard_check_cpu(struct cpufreq_alucard_cpuinfo *this_alucard_cpuin
 #else
 		if (cur_load >= inc_cpu_load && cpu_policy->cur < max_freq) {
 			tmp_freq = min(cpu_policy->cur + (pump_inc_step * 108000), max_freq);
-		} else if (cur_load < dec_cpu_load && cpu_policy->cur > min_freq) {
-			tmp_freq = max(cpu_policy->cur - (pump_dec_step * 108000), min_freq);
-		} else {
-			tmp_freq = cpu_policy->cur;
-		}
-		cpufreq_frequency_table_target(cpu_policy, this_alucard_cpuinfo->freq_table, tmp_freq,
-			CPUFREQ_RELATION_H, &index);
-		if (this_alucard_cpuinfo->freq_table[index].frequency != cpu_policy->cur) {
 			cpufreq_frequency_table_target(cpu_policy, this_alucard_cpuinfo->freq_table, tmp_freq,
 				CPUFREQ_RELATION_L, &index);
+		} else if (cur_load < dec_cpu_load && cpu_policy->cur > min_freq) {
+			tmp_freq = max(cpu_policy->cur - (pump_dec_step * 108000), min_freq);
+			cpufreq_frequency_table_target(cpu_policy, this_alucard_cpuinfo->freq_table, tmp_freq,
+				CPUFREQ_RELATION_H, &index);
+		} else {
+			tmp_freq = cpu_policy->cur;
+			return; // the current frequency is enough for the load 
 		}
 	 	next_freq = this_alucard_cpuinfo->freq_table[index].frequency;
 #endif
