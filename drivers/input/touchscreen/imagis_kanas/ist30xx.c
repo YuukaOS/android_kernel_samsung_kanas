@@ -1119,8 +1119,8 @@ static void reset_work_func(struct work_struct *work)
 
 		ist30xx_enable_irq(ts_data);
 
+#if TOUCH_BOOSTER
 		// TOUCH BOSTER FIX AT RESET #FIXME
-		{
 		cpufreq_limit_put(min_handle);
 		_store_cpu_num_min_limit(1);
 
@@ -1128,7 +1128,7 @@ static void reset_work_func(struct work_struct *work)
 
 		min_handle = NULL;
 		touch_booster_finger_cnt = 0;
-		}
+#endif
 
 		mutex_unlock(&ist30xx_mutex);
 	}
