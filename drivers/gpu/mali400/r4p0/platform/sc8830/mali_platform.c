@@ -282,9 +282,9 @@ void mali_platform_power_mode_change(int power_mode)
 	case 0:
 		if(!gpu_power_on)
 		{
-			old_gpu_clock_div = 1;
+			old_gpu_clock_div = 4;
 			old_mali_freq_select = 1;
-			gpu_cur_freq = GPU_SELECT1_MAX;
+			gpu_cur_freq = GPU_SELECT1_MAX/4;
 			gpu_power_on = 1;
 			sci_glb_clr(REG_PMU_APB_PD_GPU_TOP_CFG, BIT_PD_GPU_TOP_FORCE_SHUTDOWN);
 			mdelay(2);
@@ -483,12 +483,12 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 		// the absolute loading ratio is 1/gpu_clock_div * utilization/256
 		// to keep the loading ratio above 70% at a certain level,
 		// the absolute loading level is ceil(1/(1/gpu_clock_div * utilization/256 / (7/10)))
-		gpu_clock_div = gpu_clock_div*(256*7/10)/utilization + 1;
+		gpu_clock_div = (256*7/10)/utilization + 1;
 
 		// if the 90% of max loading ratio of new level is smaller than the current loading ratio, shift up
 		// 1/old_div * utilization/256 > 1/gpu_clock_div * 90%
-		if(gpu_clock_div*utilization > old_gpu_clock_div*256*9/10)
-			gpu_clock_div--;
+		//if(gpu_clock_div*utilization > old_gpu_clock_div*256*9/10)
+		//	gpu_clock_div--;
 
 		if(gpu_clock_div < min_div) gpu_clock_div = min_div;
 		if(gpu_clock_div > max_div) gpu_clock_div = max_div;
