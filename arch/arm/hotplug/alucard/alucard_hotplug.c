@@ -749,7 +749,9 @@ int __init alucard_hotplug_init(void)
 	}
 
 	if (atomic_read(&hotplug_tuners_ins.hotplug_enable) > 0) {
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
 		hotplugger_disable_conflicts(&hotplugger_handler);
+#endif
 		start_rq_work();
 	}
 
