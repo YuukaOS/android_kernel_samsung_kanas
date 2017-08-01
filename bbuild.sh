@@ -7,11 +7,11 @@
 
 set -o pipefail
 
-#Use ccache if it's present
+# Use ccache if it's present
 USE_CCACHE=1
 # Name is too long to show in TWRP, so have a shorter one.
-# But doing so, we'll have to use build numbers
-# Default is 0
+# But in doing so, we'll have to use build numbers
+# The default is 0
 USE_SHORTER_NAME=0
 
 NAME=SandroidKernel
@@ -19,10 +19,6 @@ VERSION=v1.3
 DEVICE=kanas
 OWNER=MuhammadIhsan-Ih24n
 SUFFIX=SA
-
-export ARCH=arm
-export CROSS_COMPILE=/home/muhammadihsan/Toolchain/arm-linux-eabi-UB-4.9/bin/arm-eabi-
-export LOCALVERSION=-`echo SandroidTeam-$USER`
 
 DEFCONFIG=sandroid_kanas_defconfig
 DEFCONFIG_DIR=arch/arm/configs
@@ -50,10 +46,14 @@ COLOR_GREEN="\033[1;32m"
 FAILED_STR=$COLOR_RED"(FAILED)"$COLOR_NEUTRAL
 SUCCESS_STR=$COLOR_GREEN"(SUCCESS)$COLOR_NEUTRAL"
 
+export ARCH=arm
+export CROSS_COMPILE=${KERNEL_PATH}/builds/toolchains/bin/arm-eabi-
+export LOCALVERSION=-`echo SandroidTeam-$USER`
+
 # Checks and sets build date, and zip filename
 check_build_date() {
 	if [[ ${USE_SHORTER_NAME} == 1 ]]; then
-		NOW=`date "+%d%m%Y%p"`
+		NOW=`date "+%Y%m%d%p"`
 		KERNEL_ZIP_NAME=SAKernel-${VERSION}-${NOW}-${BUILD_NUMBER}
 	else
 		NOW=`date "+%d%m%Y-%H%M%S"`
@@ -108,13 +108,13 @@ make_zip() {
 
 # Locates all .ko modules and copies them to a temporary location
 copy_modules() {
-	. ${KERNEL_PATH}/.config #Loads .config, apparently it has sh-like syntax
+	. ${KERNEL_PATH}/.config #Loads .config, apparently it has a sh-like syntax
 	rm -r ${KERNEL_ZIP}/system
 
 	if [[ $CONFIG_MODULES -eq y ]]; then
 		modules=$(find ${MODULES_PATH} -name "*.ko" -type f | wc -l)
 		if [[ $modules -eq 0 ]]; then
-#			echo "No modules *.ko found"
+			#echo "No modules *.ko found"
 			return 0;
 		fi
 
