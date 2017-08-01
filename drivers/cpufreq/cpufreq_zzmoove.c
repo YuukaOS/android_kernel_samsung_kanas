@@ -4093,9 +4093,11 @@ static ssize_t store_disable_hotplug(struct kobject *a, struct attribute *b, con
 		strncpy(dbs_tuners_ins.profile, custom_profile, sizeof(dbs_tuners_ins.profile));
 	    }
 #endif /* ENABLE_PROFILES_SUPPORT */
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
 	if (dbs_tuners_ins.disable_hotplug != input && input == 0) {
 		hotplugger_disable_conflicts(&hotplugger_handler);
 	}
+#endif /* CONFIG_HOTPLUGGER_INTERFACE */
 
 	    dbs_tuners_ins.disable_hotplug = input;
 
@@ -5484,9 +5486,12 @@ static inline int set_profile(int profile_num)
 		    if (zzmoove_profiles[i].disable_hotplug == 1) {
 			enable_cores = 1;
 			queue_work_on(0, dbs_wq, &hotplug_online_work);
-		    } else {
+		    }
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
+		       else {
 			hotplugger_disable_conflicts(&hotplugger_handler);
 			}
+#endif /* CONFIG_HOTPLUGGER_INTERFACE */
 		}
 		// ZZ: set disable_hotplug_sleep value
 #if (defined(CONFIG_HAS_EARLYSUSPEND) || defined(CONFIG_POWERSUSPEND) && !defined(DISABLE_POWER_MANAGEMENT)) || defined(USE_LCD_NOTIFIER)
@@ -8547,9 +8552,11 @@ void zzmoove_suspend(void)
 	dbs_tuners_ins.fast_scaling_down = fast_scaling_down_asleep;		// Yank: set fast scaling for sleep for downscaling
 #ifdef ENABLE_HOTPLUGGING
 	dbs_tuners_ins.disable_hotplug = disable_hotplug_asleep;		// ZZ: set hotplug switch for sleep
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
 	if (dbs_tuners_ins.disable_hotplug == 0) {
 		hotplugger_disable_conflicts(&hotplugger_handler);
 	}
+#endif /* CONFIG_HOTPLUGGER_INTERFACE */
 
 #endif /* ENABLE_HOTPLUGGING */
 	evaluate_scaling_order_limit_range(0, 0, suspend_flag, 0, 0);		// ZZ: table order detection and limit optimizations
@@ -8767,9 +8774,11 @@ void zzmoove_resume(void)
 	dbs_tuners_ins.fast_scaling_down = fast_scaling_down_awake;		// Yank: restore previous settings for downscaling
 #ifdef ENABLE_HOTPLUGGING
 	dbs_tuners_ins.disable_hotplug = disable_hotplug_awake;			// ZZ: restore previous settings
+#ifdef CONFIG_HOTPLUGGER_INTERFACE
 	if (dbs_tuners_ins.disable_hotplug == 0) {
 		hotplugger_disable_conflicts(&hotplugger_handler);
 	}
+#endif /* CONFIG_HOTPLUGGER_INTERFACE */
 
 #endif /* ENABLE_HOTPLUGGING */
 	evaluate_scaling_order_limit_range(0, 0, suspend_flag, 0, 0);		// ZZ: table order detection and limit optimizations
