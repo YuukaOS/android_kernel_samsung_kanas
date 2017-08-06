@@ -12,6 +12,8 @@
 #include <linux/battery/sec_battery.h>
 #include <linux/battery/sec_fuelgauge.h>
 #include <linux/rtc.h>
+#include <asm/system_info.h>
+
 
 #if defined(CONFIG_MFD_88PM800)
 #include <linux/mfd/88pm80x.h>

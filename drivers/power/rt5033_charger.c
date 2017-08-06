@@ -12,6 +12,8 @@
 
 #include <linux/battery/sec_charger.h>
 #include <linux/battery/sec_battery.h>
+#include <asm/system_info.h>
+
 #ifdef CONFIG_FLED_RT5033
 #include <linux/leds/rt5033_fled.h>
 #include <linux/leds/rtfled.h>
