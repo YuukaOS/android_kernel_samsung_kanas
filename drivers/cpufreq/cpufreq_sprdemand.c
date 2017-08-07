@@ -779,11 +779,11 @@ static void sd_check_cpu(int cpu, unsigned int load)
 	sd_tuners = dbs_data->tuners;
 
 	/* skip cpufreq adjustment if system enter into suspend */
-	if(true == sd_tuners->is_suspend) {
-		pr_info("%s: is_suspend=%s, skip cpufreq adjust\n",
-			__func__, sd_tuners->is_suspend?"true":"false");
-		goto plug_check;
-	}
+	//if(true == sd_tuners->is_suspend) {
+	//	pr_info("%s: is_suspend=%s, skip cpufreq adjust\n",
+	//		__func__, sd_tuners->is_suspend?"true":"false");
+	//	goto plug_check;
+	//}
 
 	cpufreq_notify_utilization(policy, load);
 
