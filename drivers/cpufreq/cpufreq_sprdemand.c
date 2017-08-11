@@ -752,80 +752,11 @@ static unsigned int sd_unplug_avg_load11(int cpu, struct sd_dbs_tuners *sd_tunne
 	return avg_load;
 }
 
-/*
- * Every sampling_rate, we check, if current idle time is less than 20%
- * (default), then we try to increase frequency. Else, we adjust the frequency
- * proportional to load.
- */
-static void sd_check_cpu(int cpu, unsigned int load)
+static inline void sd_plug_check(unsigned int load, struct sd_dbs_tuners *sd_tuners, struct cpufreq_policy *policy)
 {
-	struct od_cpu_dbs_info_s *dbs_info = &per_cpu(sd_cpu_dbs_info, cpu);
-	struct cpufreq_policy *policy;
-	struct dbs_data *dbs_data;
-	struct sd_dbs_tuners *sd_tuners;
+	int cpu_num_limit = 0;
 	unsigned int itself_avg_load = 0;
 	struct unplug_work_info *puwi;
-	int cpu_num_limit = 0;
-	
-	if (!dbs_info->cdbs.cur_policy
-		|| !dbs_info->cdbs.cur_policy->governor_data
-		|| !((struct dbs_data*)(dbs_info->cdbs.cur_policy->governor_data))->tuners) {
-		pr_err("%s: sprdemand is not initialized\n", __func__);
-		return;
-	}
-
-	policy = dbs_info->cdbs.cur_policy;
-	dbs_data = policy->governor_data;
-	sd_tuners = dbs_data->tuners;
-
-	/* skip cpufreq adjustment if system enter into suspend */
-	//if(true == sd_tuners->is_suspend) {
-	//	pr_info("%s: is_suspend=%s, skip cpufreq adjust\n",
-	//		__func__, sd_tuners->is_suspend?"true":"false");
-	//	goto plug_check;
-	//}
-
-	cpufreq_notify_utilization(policy, load);
-
-	dbs_info->freq_lo = 0;
-
-    /* Check for frequency increase */
-	if (load > sd_tuners->up_threshold) {
-		/* If switching to max speed, apply sampling_down_factor */
-		if (policy->cur < policy->max)
-			dbs_info->rate_mult =
-				sd_tuners->sampling_down_factor;
-		if(num_online_cpus() == sd_tuners->cpu_num_limit)
-			dbs_freq_increase(policy, policy->max);
-		else
-			dbs_freq_increase(policy, policy->max-1);
-		goto plug_check;
-	} else {
-        /* Calculate the next frequency proportional to load */
-		unsigned int freq_next;
-		freq_next = load * policy->cpuinfo.max_freq / 100;
-		/* No longer fully busy, reset rate_mult */
-		dbs_info->rate_mult = 1;
-
-		if (freq_next < policy->min)
-			freq_next = policy->min;
-
-		if (!sd_tuners->powersave_bias) {
-			__cpufreq_driver_target(policy, freq_next,
-					CPUFREQ_RELATION_L);
-			goto plug_check;
-		}
-
-		freq_next = sd_ops.powersave_bias_target(policy, freq_next,
-					CPUFREQ_RELATION_L);
-		__cpufreq_driver_target(policy, freq_next, CPUFREQ_RELATION_L);
-	}
-
-plug_check:
-
-	/* skip cpu hotplug check if hotplug is disabled */
-	if (sd_tuners->cpu_hotplug_disable)
-		return;
 
 	/* cpu plugin check */
 	spin_lock(&g_lock);
@@ -934,6 +865,79 @@ plug_check:
 
 		}
 	}
+}
+
+/*
+ * Every sampling_rate, we check, if current idle time is less than 20%
+ * (default), then we try to increase frequency. Else, we adjust the frequency
+ * proportional to load.
+ */
+static void sd_check_cpu(int cpu, unsigned int load)
+{
+	struct od_cpu_dbs_info_s *dbs_info = &per_cpu(sd_cpu_dbs_info, cpu);
+	struct cpufreq_policy *policy;
+	struct dbs_data *dbs_data;
+	struct sd_dbs_tuners *sd_tuners;
+	
+	if (!dbs_info->cdbs.cur_policy
+		|| !dbs_info->cdbs.cur_policy->governor_data
+		|| !((struct dbs_data*)(dbs_info->cdbs.cur_policy->governor_data))->tuners) {
+		pr_err("%s: sprdemand is not initialized\n", __func__);
+		return;
+	}
+
+	policy = dbs_info->cdbs.cur_policy;
+	dbs_data = policy->governor_data;
+	sd_tuners = dbs_data->tuners;
+
+	/* skip cpufreq adjustment if system enter into suspend */
+	//if(true == sd_tuners->is_suspend) {
+	//	pr_info("%s: is_suspend=%s, skip cpufreq adjust\n",
+	//		__func__, sd_tuners->is_suspend?"true":"false");
+	//	goto plug_check;
+	//}
+
+	cpufreq_notify_utilization(policy, load);
+
+	dbs_info->freq_lo = 0;
+
+    /* Check for frequency increase */
+	if (load > sd_tuners->up_threshold) {
+		/* If switching to max speed, apply sampling_down_factor */
+		if (policy->cur < policy->max)
+			dbs_info->rate_mult =
+				sd_tuners->sampling_down_factor;
+		if(num_online_cpus() == sd_tuners->cpu_num_limit)
+			dbs_freq_increase(policy, policy->max);
+		else
+			dbs_freq_increase(policy, policy->max-1);
+		goto plug_check;
+	} else {
+        /* Calculate the next frequency proportional to load */
+		unsigned int freq_next;
+		freq_next = load * policy->cpuinfo.max_freq / 100;
+		/* No longer fully busy, reset rate_mult */
+		dbs_info->rate_mult = 1;
+
+		if (freq_next < policy->min)
+			freq_next = policy->min;
+
+		if (!sd_tuners->powersave_bias) {
+			__cpufreq_driver_target(policy, freq_next,
+					CPUFREQ_RELATION_L);
+			goto plug_check;
+		}
+
+		freq_next = sd_ops.powersave_bias_target(policy, freq_next,
+					CPUFREQ_RELATION_L);
+		__cpufreq_driver_target(policy, freq_next, CPUFREQ_RELATION_L);
+	}
+
+plug_check:
+
+	/* skip cpu hotplug check if hotplug is disabled */
+	if (!sd_tuners->cpu_hotplug_disable)
+		sd_plug_check(load, sd_tuners, policy);
 }
 
 static void sd_dbs_timer(struct work_struct *work)
