@@ -763,27 +763,29 @@ static inline void sd_plug_check(unsigned int load, struct sd_dbs_tuners *sd_tun
 	struct unplug_work_info *puwi;
 
 	/* cpu plugin check */
-	spin_lock(&g_lock);
-	cpu_num_limit = min(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
-	if(num_online_cpus() < cpu_num_limit)
+	if (policy->cpu == 0)
 	{
-		pr_debug("cpu_num_limit=%d, begin plugin cpu!\n",cpu_num_limit);
-		schedule_delayed_work_on(0, &plugin_work, 0);
-	}
-	else
-	{
-		cpu_score += cpu_evaluate_score(policy->cpu,sd_tuners, load);
-		if (cpu_score < 0)
-			cpu_score = 0;
-		if((cpu_score >= sd_tuners->cpu_score_up_threshold)
-			&&(num_online_cpus() < g_sd_tuners->cpu_num_limit))
+		cpu_num_limit = min(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
+		if(num_online_cpus() < cpu_num_limit)
 		{
-			pr_debug("cpu_score=%d, begin plugin cpu!\n", cpu_score);
-			cpu_score = 0;
+			pr_debug("cpu_num_limit=%d, begin plugin cpu!\n",cpu_num_limit);
 			schedule_delayed_work_on(0, &plugin_work, 0);
 		}
+		else
+		{
+			cpu_score += cpu_evaluate_score(policy->cpu,sd_tuners, load);
+			if (cpu_score < 0)
+				cpu_score = 0;
+			if((cpu_score >= sd_tuners->cpu_score_up_threshold)
+				&&(num_online_cpus() < g_sd_tuners->cpu_num_limit))
+			{
+				pr_debug("cpu_score=%d, begin plugin cpu!\n", cpu_score);
+				cpu_score = 0;
+				schedule_delayed_work_on(0, &plugin_work, 0);
+			}
+		}
+		return;
 	}
-	spin_unlock(&g_lock);
 
 	/* cpu unplug check */
 	puwi = &per_cpu(uwi, policy->cpu);
@@ -797,15 +799,13 @@ static inline void sd_plug_check(unsigned int load, struct sd_dbs_tuners *sd_tun
 
 			cpu_num_limit = max(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
 
-				if (policy->cpu) {
-				if((num_online_cpus() > cpu_num_limit)
-					|| ((itself_avg_load < sd_tuners->cpu_down_threshold)
-						&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
-				{
-					pr_info("cpu%u's avg_load=%d,begin unplug cpu\n",
-						policy->cpu, itself_avg_load);
-					schedule_delayed_work_on(0, &puwi->unplug_work, 0);
-				}
+			if((num_online_cpus() > cpu_num_limit)
+				|| ((itself_avg_load < sd_tuners->cpu_down_threshold)
+					&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
+			{
+				pr_info("cpu%u's avg_load=%d,begin unplug cpu\n",
+					policy->cpu, itself_avg_load);
+				schedule_delayed_work_on(0, &puwi->unplug_work, 0);
 			}
 			percpu_check_count[policy->cpu] = 0;
 			percpu_total_load[policy->cpu] = 0;
@@ -819,24 +819,21 @@ static inline void sd_plug_check(unsigned int load, struct sd_dbs_tuners *sd_tun
 
 		cpu_num_limit = max(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
 
-		if(policy->cpu)
+		if ((num_online_cpus() > cpu_num_limit)
+			|| ((itself_avg_load < sd_tuners->cpu_down_threshold)
+				&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
 		{
-			if ((num_online_cpus() > cpu_num_limit)
-				|| ((itself_avg_load < sd_tuners->cpu_down_threshold)
-					&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
-			{
-				pr_info("cpu%u's avg_load=%d,begin unplug cpu\n",
-						policy->cpu, itself_avg_load);
-				percpu_load[policy->cpu] = 0;
-				cur_window_size[policy->cpu] = 0;
-				cur_window_index[policy->cpu] = 0;
-				cur_window_cnt[policy->cpu] = 0;
-				prev_window_size[policy->cpu] = 0;
-				first_window_flag[policy->cpu] = 0;
-				sum_load[policy->cpu] = 0;
-				memset(&ga_percpu_total_load[policy->cpu][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
-				schedule_delayed_work_on(0, &puwi->unplug_work, 0);
-			}
+			pr_info("cpu%u's avg_load=%d,begin unplug cpu\n",
+					policy->cpu, itself_avg_load);
+			percpu_load[policy->cpu] = 0;
+			cur_window_size[policy->cpu] = 0;
+			cur_window_index[policy->cpu] = 0;
+			cur_window_cnt[policy->cpu] = 0;
+			prev_window_size[policy->cpu] = 0;
+			first_window_flag[policy->cpu] = 0;
+			sum_load[policy->cpu] = 0;
+			memset(&ga_percpu_total_load[policy->cpu][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
+			schedule_delayed_work_on(0, &puwi->unplug_work, 0);
 		}
 	}
 	else if(num_online_cpus() > 1 && (dvfs_unplug_select > 2))
@@ -847,26 +844,21 @@ static inline void sd_plug_check(unsigned int load, struct sd_dbs_tuners *sd_tun
 
 		cpu_num_limit = max(g_sd_tuners->cpu_num_min_limit,g_sd_tuners->cpu_num_limit);
 
-		if(policy->cpu)
+		if ((num_online_cpus() > cpu_num_limit)
+			|| ((itself_avg_load < sd_tuners->cpu_down_threshold)
+				&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
 		{
-			if ((num_online_cpus() > cpu_num_limit)
-				|| ((itself_avg_load < sd_tuners->cpu_down_threshold)
-					&&(num_online_cpus() > g_sd_tuners->cpu_num_min_limit)))
-			{
-				pr_info("cpu%u's avg_load=%d,begin unplug cpu\n",
-						policy->cpu, itself_avg_load);
-				percpu_load[policy->cpu] = 0;
-				cur_window_size[policy->cpu] = 0;
-				cur_window_index[policy->cpu] = 0;
-				cur_window_cnt[policy->cpu] = 0;
-				prev_window_size[policy->cpu] = 0;
-				first_window_flag[policy->cpu] = 0;
-				sum_load[policy->cpu] = 0;
-				memset(&ga_percpu_total_load[policy->cpu][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
-
+			pr_info("cpu%u's avg_load=%d,begin unplug cpu\n",
+					policy->cpu, itself_avg_load);
+			percpu_load[policy->cpu] = 0;
+			cur_window_size[policy->cpu] = 0;
+			cur_window_index[policy->cpu] = 0;
+			cur_window_cnt[policy->cpu] = 0;
+			prev_window_size[policy->cpu] = 0;
+			first_window_flag[policy->cpu] = 0;
+			sum_load[policy->cpu] = 0;
+			memset(&ga_percpu_total_load[policy->cpu][0],0,sizeof(int) * MAX_PERCPU_TOTAL_LOAD_WINDOW_SIZE);
 				schedule_delayed_work_on(0, &puwi->unplug_work, 0);
-			}
-
 		}
 	}
 }
