@@ -933,7 +933,7 @@ static void sd_check_cpu(int cpu, unsigned int load)
 		if(num_online_cpus() == sd_tuners->cpu_num_limit)
 			dbs_freq_increase(policy, policy->max);
 		else
-			dbs_freq_increase(policy, policy->max-1);
+			dbs_freq_increase(policy, 1000000);
 		goto plug_check;
 	} else {
         /* Calculate the next frequency proportional to load */
