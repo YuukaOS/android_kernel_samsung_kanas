@@ -52,6 +52,8 @@
 /* whether unplug cpu according to this down threshold*/
 #define DEF_CPU_LOAD_DOWN_THRESHOLD		(20)
 #define DEF_CPU_DOWN_COUNT		(3)
+/* whether to scale frequencies in steps */
+#define DEF_LIKE_ALUCARD		(0)
 
 #define LOAD_CRITICAL 100
 #define LOAD_HI 90
@@ -69,6 +71,8 @@
 static unsigned long boot_done;
 
 unsigned int cpu_hotplug_disable_set = false;
+
+unsigned int previous_step = 0;
 
 struct unplug_work_info {
 	unsigned int cpuid;
@@ -902,7 +906,26 @@ static void sd_check_cpu(int cpu, unsigned int load)
 	dbs_info->freq_lo = 0;
 
     /* Check for frequency increase */
-	if (load > sd_tuners->up_threshold) {
+	if (sd_tuners->like_alucard == 1) {
+		unsigned int relation;
+		int freq_next;
+		/* Calculate the next frequency by steps by 100Mhz
+		It's slow but could be more conservative and
+		simpler the conservative governor */
+		freq_next = policy->cur;
+
+		/* Predict the next frequency */
+		if (load >= 80 && policy->cur < policy->max) {
+			freq_next += 100000;
+			relation = CPUFREQ_RELATION_L;
+		} else if (load <= 60 && policy->cur > policy->min) {
+			freq_next -= 200000;
+			relation = CPUFREQ_RELATION_H;
+		}
+
+		__cpufreq_driver_target(policy, freq_next,
+				relation);
+	} else if (load > sd_tuners->up_threshold) {
 		/* If switching to max speed, apply sampling_down_factor */
 		if (policy->cur < policy->max)
 			dbs_info->rate_mult =
@@ -1082,6 +1105,21 @@ static ssize_t store_io_is_busy(struct dbs_data *dbs_data, const char *buf,
 		dbs_info->cdbs.prev_cpu_idle = get_cpu_idle_time(j,
 			&dbs_info->cdbs.prev_cpu_wall, sd_tuners->io_is_busy);
 	}
+	return count;
+}
+
+static ssize_t store_like_alucard(struct dbs_data *dbs_data, const char *buf,
+		size_t count)
+{
+	struct sd_dbs_tuners *sd_tuners = dbs_data->tuners;
+	unsigned int input;
+	int ret;
+
+	ret = sscanf(buf, "%u", &input);
+	if (ret != 1)
+		return -EINVAL;
+	sd_tuners->like_alucard = input;
+
 	return count;
 }
 
@@ -1465,6 +1503,7 @@ static ssize_t store_cpu_hotplug_disable(struct dbs_data *dbs_data, const char *
 
 show_store_one(sd, sampling_rate);
 show_store_one(sd, io_is_busy);
+show_store_one(sd, like_alucard);
 show_store_one(sd, up_threshold);
 show_store_one(sd, sampling_down_factor);
 show_store_one(sd, ignore_nice);
@@ -1489,6 +1528,7 @@ show_store_one(sd, cpu_num_min_limit);
 
 gov_sys_pol_attr_rw(sampling_rate);
 gov_sys_pol_attr_rw(io_is_busy);
+gov_sys_pol_attr_rw(like_alucard);
 gov_sys_pol_attr_rw(up_threshold);
 gov_sys_pol_attr_rw(sampling_down_factor);
 gov_sys_pol_attr_rw(ignore_nice);
@@ -1519,6 +1559,7 @@ static struct attribute *dbs_attributes_gov_sys[] = {
 	&ignore_nice_gov_sys.attr,
 	&powersave_bias_gov_sys.attr,
 	&io_is_busy_gov_sys.attr,
+	&like_alucard_gov_sys.attr,
 	&cpu_score_up_threshold_gov_sys.attr,
 	&load_critical_gov_sys.attr,
 	&load_hi_gov_sys.attr,
@@ -1551,6 +1592,7 @@ static struct attribute *dbs_attributes_gov_pol[] = {
 	&ignore_nice_gov_pol.attr,
 	&powersave_bias_gov_pol.attr,
 	&io_is_busy_gov_pol.attr,
+	&like_alucard_gov_pol.attr,
 	&cpu_score_up_threshold_gov_pol.attr,
 	&load_critical_gov_pol.attr,
 	&load_hi_gov_pol.attr,
@@ -1632,6 +1674,8 @@ static int sd_init(struct dbs_data *dbs_data)
 	tuners->ignore_nice = 0;
 	tuners->powersave_bias = 0;
 	tuners->io_is_busy = should_io_be_busy();
+
+	tuners->like_alucard = DEF_LIKE_ALUCARD;
 
 	tuners->cpu_hotplug_disable = true;
 	tuners->is_suspend = false;

@@ -201,6 +201,8 @@ struct sd_dbs_tuners {
 	unsigned int powersave_bias;
 	unsigned int io_is_busy;
 
+	unsigned int like_alucard;
+
 	unsigned int cpu_hotplug_disable;
 	unsigned int is_suspend;
 	unsigned int cpu_score_up_threshold;
