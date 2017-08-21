@@ -918,14 +918,21 @@ static void sd_check_cpu(int cpu, unsigned int load)
 		__cpufreq_driver_target(policy, freq_next,
 				relation);
 	} else if (load > sd_tuners->up_threshold) {
+		int online_cpus = num_online_cpus();
 		/* If switching to max speed, apply sampling_down_factor */
 		if (policy->cur < policy->max)
 			dbs_info->rate_mult =
 				sd_tuners->sampling_down_factor;
-		if(num_online_cpus() == sd_tuners->cpu_num_limit)
+
+		/* Wellness check: if "idle", switch to 600Mhz not to max*/
+		if (online_cpus == 1 && policy->min < 600000 &&
+			policy->cur == policy->min) {
+			dbs_freq_increase(policy, 600000);
+        } else if(online_cpus == sd_tuners->cpu_num_limit)
 			dbs_freq_increase(policy, policy->max);
 		else
 			dbs_freq_increase(policy, 1000000);
+		
 		goto plug_check;
 	} else {
         /* Calculate the next frequency proportional to load */
