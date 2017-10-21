@@ -31,7 +31,8 @@
 #include <linux/kthread.h>
 #include <linux/slab.h>
 #include <linux/kernel_stat.h>
-#include <linux/display_state.h>
+//#include <linux/display_state.h>
+#include <linux/earlysuspend.h>
 #include <linux/ratelimit.h>
 #include <asm/cputime.h>
 
@@ -39,6 +40,7 @@
 #include <trace/events/cpufreq_interactive.h>
 
 static int active_count;
+static bool display_on = true;
 
 struct cpufreq_interactive_cpuinfo {
 	struct timer_list cpu_timer;
@@ -373,7 +375,6 @@ static void cpufreq_interactive_timer(unsigned long data)
 	unsigned int index;
 	unsigned long flags;
 	unsigned int this_hispeed_freq;
-	bool display_on = is_display_on();
 	bool jump_to_max = false;
 
 	if (!down_read_trylock(&pcpu->enable_sem))
@@ -1022,6 +1023,20 @@ static struct notifier_block cpufreq_interactive_idle_nb = {
 	.notifier_call = cpufreq_interactive_idle_notifier,
 };
 
+static void cpufreq_interactive_early_suspend(struct early_suspend *h) {
+	display_on = false;
+}
+
+static void cpufreq_interactive_late_resume(struct early_suspend *h) {
+	display_on = true;
+}
+
+static struct early_suspend __refdata cpufreq_interactive_early_suspend_handler = {
+	.level = EARLY_SUSPEND_LEVEL_BLANK_SCREEN,
+	.suspend = cpufreq_interactive_early_suspend,
+	.resume = cpufreq_interactive_late_resume,
+};
+
 static int cpufreq_governor_interactive(struct cpufreq_policy *policy,
 		unsigned int event)
 {
@@ -1202,6 +1217,8 @@ static int __init cpufreq_interactive_init(void)
 	/* NB: wake up so the thread does not look hung to the freezer */
 	wake_up_process(speedchange_task);
 
+    register_early_suspend(&cpufreq_interactive_early_suspend_handler);
+    
 	return cpufreq_register_governor(&cpufreq_gov_interactive);
 }
 
