@@ -43,10 +43,10 @@
 #endif
 
 #define GPU_GLITCH_FREE_DFS	0
-#define GPU_FIX_312MHZ	0
+#define GPU_FIX_312MHZ	1
 
 #define GPU_MIN_DIVISION	1
-#define GPU_MAX_DIVISION	4
+#define GPU_MAX_DIVISION	3
 
 #define GPU_SELECT0_VAL		0
 #define GPU_SELECT0_MAX		208000
@@ -438,17 +438,34 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 			gpu_level=1;
 			break;
 		case 2:
-			gpu_level=1;
-		case 1:
-		case 0:
-		default:
-			// if the loading ratio is greater then 90%, switch the clock to the maximum
-			if(utilization >= (256*9/10)) {
-				mali_get_freq_select(gpufreq_max_limit,&mali_freq_select,GPU_SELECT3_VAL);
-			} else {
-				mali_get_freq_select(gpufreq_max_limit,&mali_freq_select,GPU_SELECT1_VAL);
+			gpu_max_freq=GPU_SELECT1_MAX;
+#if GPU_FIX_312MHZ
+			mali_get_freq_select(gpufreq_max_limit,&mali_freq_select,GPU_SELECT3_VAL);
+#else
+			mali_get_freq_select(gpufreq_max_limit,&mali_freq_select,GPU_SELECT1_VAL);
+#endif
+			if(GPU_SELECT3_VAL==mali_freq_select)
+			{
+				gpu_max_freq=GPU_SELECT3_MAX;
+				min_div=GPU_MIN_DIVISION;
+				max_div=GPU_MIN_DIVISION;
 			}
-
+			else
+			{
+				gpu_max_freq=GPU_SELECT1_MAX;
+				mali_get_div(gpufreq_max_limit,&min_div,GPU_MIN_DIVISION);
+				mali_get_div(gpufreq_max_limit,&max_div,GPU_MIN_DIVISION);
+			}
+			gpu_level=1;
+			break;
+		case 0:
+		case 1:
+		default:
+#if GPU_FIX_312MHZ
+			mali_get_freq_select(gpufreq_max_limit,&mali_freq_select,GPU_SELECT3_VAL);
+#else
+			mali_get_freq_select(gpufreq_max_limit,&mali_freq_select,GPU_SELECT1_VAL);
+#endif
 			//if gpu frquency select 312MHz, DFS will be disabled
 			//if gpu frquency select 256MHz, DFS will be enabled
 			if(GPU_SELECT3_VAL==mali_freq_select)
@@ -498,7 +515,7 @@ void mali_platform_utilization(struct mali_gpu_utilization_data *data)
 	if((gpu_clock_div != old_gpu_clock_div)||(old_mali_freq_select!=mali_freq_select))
 	{
 #ifdef CONFIG_CPU_FREQ_GOV_ELEMENTALX
-		graphics_boost = gpu_max_freq/gpu_clock_div;
+               graphics_boost = gpu_max_freq/gpu_clock_div;
 #endif
 #if !GPU_GLITCH_FREE_DFS
 		if(gpu_dfs_workqueue)
