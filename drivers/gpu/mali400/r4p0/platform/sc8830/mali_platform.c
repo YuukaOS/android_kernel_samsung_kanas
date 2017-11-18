@@ -595,7 +595,7 @@ static struct platform_device mali_gpu_device =
 	.dev.release = mali_platform_device_release,
 };
 
-int  mali_power_initialize(struct platform_device *pdev)
+void mali_power_initialize(struct platform_device *pdev)
 {
 	int i=0;
 #ifdef CONFIG_OF
