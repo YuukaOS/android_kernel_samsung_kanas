@@ -12,8 +12,9 @@
 
 #include <linux/battery/sec_charger.h>
 #include <linux/battery/sec_battery.h>
-#include <asm/system_info.h>
-
+#ifdef CONFIG_THUNDERCHARGE_CONTROL
+#include "thundercharge_control.h"
+#endif
 #ifdef CONFIG_FLED_RT5033
 #include <linux/leds/rt5033_fled.h>
 #include <linux/leds/rtfled.h>
@@ -407,14 +408,29 @@ static void rt5033_configure_charger(struct rt5033_charger_data *charger)
 #if ENABLE_MIVR
 		rt5033_set_mivr_level(charger);
 #endif /*DISABLE_MIVR*/
+
+
+#ifdef CONFIG_THUNDERCHARGE_CONTROL
+        if (mswitch) {
+        pr_info("Using custom current of %d",custom_current);
 		/* Input current limit */
 		pr_info("%s : input current (%dmA)\n",
-				__func__, charger->pdata->charging_current
-				[charger->cable_type].input_current_limit);
+				__func__, custom_current);
 
-		rt5033_set_input_current_limit(charger,
-				charger->pdata->charging_current
-				[charger->cable_type].input_current_limit);
+		rt5033_set_input_current_limit(charger,custom_current);
+        } else {
+#endif
+			/* Input current limit */
+			pr_info("%s : input current (%dmA)\n",
+					__func__, charger->pdata->charging_current
+					[charger->cable_type].input_current_limit);
+
+			rt5033_set_input_current_limit(charger,
+					charger->pdata->charging_current
+					[charger->cable_type].input_current_limit);
+#ifdef CONFIG_THUNDERCHARGE_CONTROL
+		}
+#endif
 
 		/* Float voltage */
 		pr_info("%s : float voltage (%dmV)\n",
