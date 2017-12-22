@@ -28,8 +28,8 @@ ADB_PUSH_LOCATION=/storage/sdcard0/
 KERNEL_PATH=$(pwd)
 KERNEL_ZIP=${KERNEL_PATH}/kernel_zip
 #Name of the folder zips will be written
+ZIP_FOLDER=.
 #ZIP_FOLDER=flashable_zips
-ZIP_FOLDER=${KERNEL_PATH}
 # Absolute location where zips will be written, best when left alone
 ZIP_LOCATION=${KERNEL_PATH}/${ZIP_FOLDER}
 
@@ -54,14 +54,38 @@ export LOCALVERSION=-`echo SandroidTeam-$USER`
 check_build_date() {
 	if [[ ${USE_SHORTER_NAME} == 1 ]]; then
 		NOW=`date "+%Y%m%d%p"`
-		KERNEL_ZIP_NAME=SAKernel-${VERSION}-${NOW}-${BUILD_NUMBER}
+		KERNEL_ZIP_NAME=SAKernel-${VERSION}${NOW}-${BUILD_NUMBER}
 	else
 		NOW=`date "+%d%m%Y-%H%M%S"`
-		KERNEL_ZIP_NAME=${NAME}-${VERSION}-${DEVICE}-${OWNER}-${NOW}-${SUFFIX}
+		KERNEL_ZIP_NAME=${NAME}-${VERSION}-${DEVICE}-${OWNER}${NOW}-${SUFFIX}
+	fi
+}
+
+# Sets the kernel zip file location if it was already have been built
+load_recent_build() {
+	if [[ -e ${KERNEL_PATH}/.version ]]; then
+		BUILD_NUMBER=`cat ${KERNEL_PATH}/.version`
+	else
+		BUILD_NUMBER=0
 	fi
 
-	if [[ -e ${ZIP_LOCATION}/${KERNEL_ZIP_NAME}.zip ]]; then
-		ZIP_FINISHED=$COLOR_GREEN"(@ ${ZIP_FOLDER}/${KERNEL_ZIP_NAME}.zip)"$COLOR_NEUTRAL
+	if [[ -e ${KERNEL_PATH}/.build_time ]]; then
+		BUILD_TIME=`cat ${KERNEL_PATH}/.build_time`
+	else
+		unset BUILD_TIME
+	fi
+
+	# Construct zip relative file location
+	if [[ ${USE_SHORTER_NAME} == 1 ]]; then
+		KERNEL_ZIP_NAME=SAKernel-${VERSION}${BUILD_TIME}-${BUILD_NUMBER}
+	else
+		KERNEL_ZIP_NAME=${NAME}-${VERSION}-${DEVICE}-${OWNER}${BUILD_TIME}-${SUFFIX}
+	fi
+	ZIP_MAYBE_DONE=${ZIP_FOLDER}/${KERNEL_ZIP_NAME}.zip
+
+	# Check whether that file exists then set accordingly
+	if [[ -e ${ZIP_MAYBE_DONE} ]]; then
+		ZIP_FINISHED=$COLOR_GREEN"(@ ${ZIP_MAYBE_DONE})"$COLOR_NEUTRAL
 	fi
 }
 
@@ -95,7 +119,7 @@ make_zip() {
 	rm ${KERNEL_ZIP}/tools/zImage.old
 	copy_modules
 
-	#Change directory to the kernel_zip
+	# Change directory to the kernel_zip
 	cd ${KERNEL_PATH}/kernel_zip || return -1
 	mkdir -p ${ZIP_LOCATION} || return -1
 	zip -r ${ZIP_LOCATION}/${KERNEL_ZIP_NAME}.zip ./  || return -1
@@ -114,7 +138,7 @@ copy_modules() {
 	if [[ $CONFIG_MODULES -eq y ]]; then
 		modules=$(find ${MODULES_PATH} -name "*.ko" -type f | wc -l)
 		if [[ $modules -eq 0 ]]; then
-			#echo "No modules *.ko found"
+			echo "No module files *.ko found"
 			return 0;
 		fi
 
@@ -135,7 +159,11 @@ build_kernel() {
 	if [[ $? == 0 ]]; then
 		BUILD_RESULT=$SUCCESS_STR
 		mkdir -p ${KERNEL_ZIP}/system/lib/modules
-		check_build_date #We Check here too
+
+		#Set our finishing build time
+		check_build_date
+		echo ${NOW} > ${KERNEL_PATH}/.build_time
+
 		unset ZIP_FINISHED #Of course, current zip build is now invalid
         return 0
 	else
@@ -168,10 +196,25 @@ clean_zip() {
 adb_push_zip() {
 	echo -e $COLOR_GREEN"Pushing zip to ${ADB_PUSH_LOCATION}"$COLOR_NEUTRAL
 	if [[ -e ${ZIP_LOCATION}/${KERNEL_ZIP_NAME}.zip ]]; then
-		adb push ${ZIP_FOLDER}/${KERNEL_ZIP_NAME}.zip $ADB_PUSH_LOCATION/ || wait_on_user_input;
+		adb push ${ZIP_FOLDER}/${KERNEL_ZIP_NAME}.zip $ADB_PUSH_LOCATION/ || return -1;
 	else
 		echo -e $COLOR_RED"Zip file was not yet built."$COLOR_NEUTRAL
 		wait_on_user_input
+	fi
+}
+
+adb_push_zip_then_flash() {
+	if [[ -e ${ZIP_LOCATION}/${KERNEL_ZIP_NAME}.zip ]]; then
+		adb_push_zip || return -1
+		echo -e $COLOR_GREEN"Pushing zip to /cache/update.zip"$COLOR_NEUTRAL
+		adb push ${ZIP_FOLDER}/${KERNEL_ZIP_NAME}.zip /cache/update.zip || return -1;
+		adb shell "echo '--update_package==/cache/update.zip' >> /cache/recovery/command" || return -1
+		echo -e $COLOR_GREEN"Rebooting device..."$COLOR_NEUTRAL 
+		adb shell sync  || return -1
+		adb reboot recovery  || return -1
+	else
+		echo -e $COLOR_RED"Zip file was not yet built."$COLOR_NEUTRAL
+		return -1
 	fi
 }
 
@@ -212,6 +255,7 @@ command_5(){ call_menu || wait_on_user_input; }
 command_6(){ build_kernel || wait_on_user_input; }
 command_7(){ make_zip || wait_on_user_input; cd ${KERNEL_PATH}; }
 command_8(){ adb_push_zip || wait_on_user_input; }
+command_9(){ adb_push_zip_then_flash || wait_on_user_input; }
 command_s(){ save_as_defconfig || wait_on_user_input; }
 command_e(){ exit; }
 
@@ -219,16 +263,14 @@ command_e(){ exit; }
 #Use ccache when it's both present and enabled
 if [[ $(which ccache) ]] && [[ USE_CCACHE ]]; then
 	export CROSS_COMPILE="ccache $CROSS_COMPILE"
+	USING_CCACHE="Yes"
+else
+	USING_CCACHE="No"
 fi
 
 while true; do
-	if [[ -e ${KERNEL_PATH}/.version ]]; then
-		BUILD_NUMBER=`cat ${KERNEL_PATH}/.version`
-	else
-		BUILD_NUMBER=0
-	fi
 	#Set zip name and zip file whether it exists
-	check_build_date
+	load_recent_build
 	check_config
 	clear
 	echo -e $COLOR_RED"===================================================================="
@@ -236,18 +278,19 @@ while true; do
 	echo               "                 MODIFIED BY MUHAMMAD IHSAN <Ih24n>"
 	echo               "                      EXTENEND BY ME <impasta>"
 	echo -e $COLOR_RED"===================================================================="
-	echo -e           "  Kernel name     : $NAME"  '\t'  "Kernel version :  $VERSION"
-	echo -e           "  Bob the Builder : $USER"  '\t\t'"Build number : $BUILD_NUMBER"
-	echo -e           "  Kbuild config   : $CONFIG_FILE"
+	echo -e           "  Kernel name     : $NAME"  '\t'    "Kernel version : $VERSION"
+	echo -e           "  Bob the Builder : $USER"  '\t\t' "Build number   : $BUILD_NUMBER"
+	echo -e           "  Kbuild config   : $CONFIG_FILE"'\t\t' "Using ccache   : $USING_CCACHE"
 	echo -e $COLOR_NEUTRAL"========================="$COLOR_BLUE"Function menu flag"$COLOR_NEUTRAL"========================="
-	echo              "  1  = Clean kernel and zips"
+	echo              "  1  = Clean kernel and zip files"
 	echo              "  2  = Clean kernel"
-	echo              "  3  = Clean zips"
-	echo              "  4  = Set to $DEFCONFIG"
+	echo              "  3  = Clean all zip files"
+	echo              "  4  = Set .config file to $DEFCONFIG"
 	echo              "  5  = Configure Kernel"
-	echo -e           "  6  = Build kernel         $BUILD_RESULT"
-	echo -e           "  7  = Create flashable zip $ZIP_FINISHED"
+	echo -e           "  6  = Build kernel $BUILD_RESULT"
+	echo -e           "  7  = Zip kernel   $ZIP_FINISHED"
 	echo              "  8  = Copy zip to $ADB_PUSH_LOCATION"
+	echo              "  9  = Do task #8 then flash (CAUTION: reboots relentlessly!!!)"
 	echo              "  s  = Save .config as $DEFCONFIG"
 	echo              "  e  = Exit"
 	echo -e $COLOR_YELLOW"===================================================================="
