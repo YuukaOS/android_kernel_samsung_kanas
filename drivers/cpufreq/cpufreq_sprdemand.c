@@ -937,7 +937,15 @@ static void sd_check_cpu(int cpu, unsigned int load)
 	} else {
         /* Calculate the next frequency proportional to load */
 		unsigned int freq_next;
-		freq_next = load * policy->cpuinfo.max_freq / 100;
+		unsigned int maximum;
+
+		/* Limit consumption to 1GHz until all cores are online */
+		if (num_online_cpus() >= sd_tuners->cpu_num_limit)
+			maximum = policy->cpuinfo.max_freq;
+		else
+			maximum = 1000000;
+
+		freq_next = load * maximum / 100;
 		/* No longer fully busy, reset rate_mult */
 		dbs_info->rate_mult = 1;
 
