@@ -469,6 +469,15 @@ static int sprd_cpufreq_target(struct cpufreq_policy *policy,
 		return -EINVAL;
 	}
   
+	/* One thing missing, even though there's limits implemented
+	 * on the driver level try to respect the limits from the
+	 * cpufreq interface.
+	 */
+	if (target_freq < policy->min)
+		target_freq = policy->min;
+	else if (target_freq > policy->max)
+		target_freq = policy->max;
+
 	table = cpufreq_frequency_get_table(policy->cpu);
 
 	if (cpufreq_frequency_table_target(policy, table,
