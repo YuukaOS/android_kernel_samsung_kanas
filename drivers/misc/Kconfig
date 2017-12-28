@@ -567,6 +567,10 @@ config SRAM
 	  the genalloc API. It is supposed to be used for small on-chip SRAM
 	  areas found on many SoCs.
 
+config SPRD_BOARD_TYPE
+	tristate "sprd board type support"
+	default n
+
 config UID_SYS_STATS
 	tristate "Per-UID statistics"
 	depends on PROFILING
