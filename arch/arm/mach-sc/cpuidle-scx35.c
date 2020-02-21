@@ -162,6 +162,9 @@ static void sc_cpuidle_light_sleep_en(int cpu)
 			}
 #endif
 			sci_glb_clr(REG_AON_APB_APB_EB0, BIT_CA7_DAP_EB);
+			if (!(sci_glb_read(REG_AP_AHB_AHB_EB, -1UL) & BIT_DMA_EB) && (num_online_cpus() == 1)) {
+				sci_glb_set(REG_AP_AHB_MCU_PAUSE, BIT_MCU_SYS_SLEEP_EN);
+			}
 		}
 		sci_glb_set(REG_AP_AHB_MCU_PAUSE, LIGHT_SLEEP_ENABLE);
 	}
@@ -285,7 +288,9 @@ static int sc_enter_idle(struct cpuidle_device *dev,
 			else
 				cpu_do_idle();
 #else
+// 			sci_glb_set(REG_AP_AHB_MCU_PAUSE, BIT_MCU_SYS_SLEEP_EN);
 			cpu_do_idle();
+// 			sci_glb_clr(REG_AP_AHB_MCU_PAUSE, BIT_MCU_SYS_SLEEP_EN);
 #endif
 			sc_cpuidle_light_sleep_dis();
 		}

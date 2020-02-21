@@ -546,7 +546,7 @@ void bak_restore_aon(int bak)
 }
 void disable_ana_module(void)
 {
-	sci_adi_set(ANA_REG_GLB_LDO_PD_CTRL, BIT_LDO_SD_PD | BIT_LDO_SIM0_PD | BIT_LDO_SIM1_PD | BIT_LDO_SIM2_PD | BIT_LDO_CAMA_PD |\
+	sci_adi_set(ANA_REG_GLB_LDO_PD_CTRL, BIT_LDO_SD_PD | /* BIT_LDO_SIM0_PD | BIT_LDO_SIM1_PD | */ BIT_LDO_SIM2_PD | BIT_LDO_CAMA_PD |\
 		BIT_LDO_CAMD_PD | BIT_LDO_CAMIO_PD | BIT_LDO_CAMMOT_PD  | BIT_DCDC_WPA_PD);
 }
 void bak_restore_ana(int bak)
@@ -1049,7 +1049,8 @@ int deep_sleep(int from_idle)
 		
 		disable_dma();
 		//disable_mm();
-		//disable_ana_module();
+		bak_restore_ana(1);
+		disable_ana_module();
 		disable_aon_module();
 		show_reg_status();
 		bak_last_reg();
@@ -1086,6 +1087,7 @@ int deep_sleep(int from_idle)
 		sci_glb_set(REG_AP_APB_APB_EB, 0xf<<19);
 		hard_irq_set();
 		sci_glb_clr(REG_AP_APB_APB_EB, 0xf<<19);
+		bak_restore_ana(0);
 		disable_mcu_deep_sleep();
 		configure_for_deepsleep(1);
 		//sci_glb_clr(SPRD_PMU_BASE+0x00F4, 0x3FF);
@@ -1213,7 +1215,7 @@ static void dcdc_core_ds_config(void)
 		//unvalid value
 		break;
 	}
-	dcdc_core_ctl_ds = dcdc_core_ctl_adi;
+	// dcdc_core_ctl_ds = dcdc_core_ctl_adi;
 	printk("dcdc_core_ctl_adi = %d, dcdc_core_ctl_ds = %d\n", dcdc_core_ctl_adi, dcdc_core_ctl_ds);
 	/*valid value*/
 	if(dcdc_core_ctl_ds != -1) {
@@ -1294,6 +1296,16 @@ static void sc8830_machine_restart(char mode, const char *cmd)
 	while (1);
 }
 
+void resume_code_remap(void)
+{
+	int ret;
+	ret = ioremap_page_range(SPRD_IRAM0_PHYS, SPRD_IRAM0_PHYS+SZ_8K, SPRD_IRAM0_PHYS, PAGE_KERNEL_EXEC);
+	if(ret){
+		printk("resume_code_remap err %d\n", ret);
+		BUG();
+	}
+}
+
 void __init sc_pm_init(void)
 {
 	unsigned short rd_data=0;
@@ -1308,7 +1320,8 @@ void __init sc_pm_init(void)
 	/* disable all sleep mode */
 	sci_glb_clr(REG_AP_AHB_MCU_PAUSE, BIT_MCU_DEEP_SLEEP_EN | BIT_MCU_LIGHT_SLEEP_EN | \
 		BIT_MCU_SYS_SLEEP_EN | BIT_MCU_CORE_SLEEP);
-	set_reset_vector();	
+	set_reset_vector();
+	resume_code_remap();
 	
 	    rd_data=sci_adi_read(ANA_REG_GLB_LDO_DCDC_PD_RTCSET) ;
         rd_data=rd_data | ((0x1 << 13) | (0x1 <<5 ) | (0x1 << 6 ));
