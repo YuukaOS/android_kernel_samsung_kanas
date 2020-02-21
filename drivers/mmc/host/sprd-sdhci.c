@@ -482,7 +482,6 @@ int sprd_sdhci_host_regulator_vmmc_notify(struct notifier_block *nb, unsigned lo
 static void sprd_sdhci_host_sdhci_request(struct mmc_host *mmc, struct mmc_request *mrq) {
 	struct sdhci_host *host = mmc_priv(mmc);
 	struct sprd_sdhci_host *sprd_host = SDHCI_HOST_TO_SPRD_HOST(host);
-	sprd_sdhci_host_wake_lock(&sprd_host->wake_lock);
 	sprd_host->standard_mmc_host_ops.request(mmc, mrq);
 }
 
@@ -520,7 +519,6 @@ static void sprd_sdhci_host_tasklet_finish(unsigned long param) {
 	host = (struct sdhci_host*)param;
 	sprd_host = SDHCI_HOST_TO_SPRD_HOST(host);
 	sprd_host->finish_tasklet.func(param);
-	sprd_sdhci_host_wake_unlock(&sprd_host->wake_lock);
 }
 
 static int sprd_sdhci_host_get_cd(struct mmc_host *mmc) {
