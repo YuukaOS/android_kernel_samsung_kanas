@@ -121,7 +121,6 @@ irqreturn_t smsg_irq_handler(int irq, void *dev_id)
 		atomic_dec(&(ch->busy));
 	}
 
-	wake_lock_timeout(&sipc_wake_lock, HZ / 2);
 
 	return IRQ_HANDLED;
 }
