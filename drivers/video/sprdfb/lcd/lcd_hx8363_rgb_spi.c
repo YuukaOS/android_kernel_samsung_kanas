@@ -55,10 +55,14 @@ static int32_t hx8363_init(struct panel_spec *self)
 	HX8363_SpiWriteData(0x44);
 	HX8363_SpiWriteData(0x08);
 	HX8363_SpiWriteData(0x01);
-	HX8363_SpiWriteData(0x0E); //
-	HX8363_SpiWriteData(0x0E); //
-	HX8363_SpiWriteData(0x1B); //the lower ,Saturation is better
-	HX8363_SpiWriteData(0x23); //the lower ,Saturation is better
+//	HX8363_SpiWriteData(0x0E); //
+//	HX8363_SpiWriteData(0x0E); //
+//	HX8363_SpiWriteData(0x1B); //the lower ,Saturation is better
+//	HX8363_SpiWriteData(0x23); //the lower ,Saturation is better
+	HX8363_SpiWriteData(0x0F); //
+	HX8363_SpiWriteData(0x0F); //
+	HX8363_SpiWriteData(0x22); //the lower ,Saturation is better
+	HX8363_SpiWriteData(0x2A); //the lower ,Saturation is better
 	HX8363_SpiWriteData(0x3F);
 	HX8363_SpiWriteData(0x3F);
 	HX8363_SpiWriteData(0x40);
@@ -88,7 +92,7 @@ static int32_t hx8363_init(struct panel_spec *self)
 
 	HX8363_SpiWriteCmd(0xCC); // SET Panel
 	HX8363_SpiWriteData(0x01); //
-	mdelay(5);
+	msleep(5);
 
 	HX8363_SpiWriteCmd(0xE0);  // SET Gamma
 	HX8363_SpiWriteData(0x00);
@@ -262,13 +266,13 @@ static int32_t hx8363_init(struct panel_spec *self)
 	HX8363_SpiWriteData(0x77); // 
 
 	HX8363_SpiWriteCmd(0x11);//Sleep Out 
-	mdelay(120);
+	msleep(120);
 	HX8363_SpiWriteCmd(0x35); //Tearing Effect 
 	HX8363_SpiWriteData(0x00); // 
 	HX8363_SpiWriteCmd(0x36);
 	HX8363_SpiWriteData(0x02); 
 	HX8363_SpiWriteCmd(0x29); 
-	mdelay(10);
+	msleep(10);
 	HX8363_SpiWriteCmd(0x2C); 
 
 }
@@ -281,15 +285,15 @@ static int32_t hx8363_enter_sleep(struct panel_spec *self, uint8_t is_sleep)
 	if(is_sleep==1){
 		//Sleep In
 		HX8363_SpiWriteCmd(0x28);
-		mdelay(120); 
+		msleep(120);
 		HX8363_SpiWriteCmd(0x10);
-		mdelay(10); 
+		msleep(10);
 	}else{
 		//Sleep Out
 		HX8363_SpiWriteCmd(0x11);
-		mdelay(120); 
+		msleep(120);
 		HX8363_SpiWriteCmd(0x29);
-		mdelay(10); 
+		msleep(10);
 	}
 
 	return 0;
@@ -413,12 +417,9 @@ static struct info_rgb lcd_hx8363_rgb_info = {
 };
 
 struct panel_spec lcd_panel_hx8363_rgb_spi_spec = {
-#ifdef CONFIG_FB_LOW_RES_SIMU
-	.display_width = 320,
-	.display_height = 512,
-#endif
 	.width = 480,
 	.height = 854,
+	.reset_timing = {20, 10, 120},
 	.fps = 61,
 	.type = LCD_MODE_RGB,
 	.direction = LCD_DIRECT_NORMAL,

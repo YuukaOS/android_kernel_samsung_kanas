@@ -3,6 +3,7 @@
 #include <linux/delay.h>
 #include "../sprdfb_panel.h"
 #include "../sprdfb_dispc_reg.h"
+#include "../esd_detect.h"
 #include <mach/gpio.h>
 #include <linux/platform_device.h>
 #include <linux/err.h>
@@ -353,12 +354,12 @@ extern void rt4502_backlight_off(void);
 
 struct esd_det_info hx8369b_esd_info = {
 	.name = "hx8369b",
-	.mode = ESD_DET_NOT_REQUIRED,
+	.type = ESD_POLLING /*ESD_DET_NOT_REQUIRED*/,
 	.gpio = 105,
-	.state = ESD_DET_NOT_INITIALIZED,
-	.level = ESD_DET_HIGH,
-	.backlight_on = rt4502_backlight_on,
-	.backlight_off = rt4502_backlight_off,
+// 	.state = ESD_DET_NOT_INITIALIZED,
+// 	.level = ESD_DET_HIGH,
+// 	.backlight_on = rt4502_backlight_on,
+// 	.backlight_off = rt4502_backlight_off,
 };
 #endif
 static struct panel_operations lcd_hx8369b_mipi_operations_dtc = {

@@ -39,9 +39,11 @@
 #define LINES_ONLY_CLK_RIGHT_TI
 
 /* For CHIPONE! ONLY ONE of the flowing marco can be defined! */
+#if 1
+#define LINES_ALL_WRONG_C1
+#else  // 5735A-2 v1.0.1
 #define LINES_ALL_RIGHT_C1
-//#define LINES_ONLY_CLK_RIGHT_C1
-//#define LINES_ALL_WRONG_C1
+#endif
 /***************** Important Macro! *****************/
 
 struct bridge_ops {
@@ -113,7 +115,7 @@ const static __u8 i2c_msg_buf_ti[][2] = {
 		{0x31, 0x00},
 		{0x32, 0x00},
 		{0x33, 0x00},
-		{0x34, 0x50},
+		{0x34, 0x4C},
 		{0x35, 0x00},
 		{0x36, 0x00},
 		{0x37, 0x00},
@@ -131,15 +133,15 @@ const static __u8 i2c_msg_buf_c1[][2] = {
 		{0x21, 0x00},
 		{0x22, 0x43},
 		{0x23, 0x28},
-		{0x24, 0x28},
-		{0x25, 0x28},
+		{0x24, 0x04},
+		{0x25, 0x4C},
 		{0x26, 0x00},
 		{0x27, 0x12},
         {0x28, 0x04},/*0x02*/
-		{0x29, 0x17},
+		{0x29, 0x13},
 		{0x2A, 0x01},
 		{0x34, 0xF0},/*add*/
-		{0x36, 0x6E},/*add*/
+		{0x36, 0x50},/*add*/
 		{0x86, 0x2B},
 		{0xB5, 0xA0},
 		{0x51, 0x20},
@@ -147,6 +149,7 @@ const static __u8 i2c_msg_buf_c1[][2] = {
 		{0x69, 0x1C},/*0x1F*/
 		{0x6B, 0x22},
 		{0x5C, 0xFF},
+		{0xB6, 0x20},
 #ifdef LINES_ALL_RIGHT_C1
         {0x13, 0x10},
 #elif defined LINES_ONLY_CLK_RIGHT_C1
@@ -221,7 +224,7 @@ static int32_t set_en_pin(struct panel_spec *self, uint8_t value, uint8_t delays
 
 	if (value) {//set high
 		gpio_direction_output(GPIOID_BRIDGE_EN, 0);
-		mdelay(delays);
+		msleep(delays);
 		gpio_direction_output(GPIOID_BRIDGE_EN, 1);
 	} else {//set low
         gpio_direction_output(GPIOID_BRIDGE_EN, 0);
@@ -257,7 +260,7 @@ static int32_t sn65dsi83_init(struct panel_spec *self)
 	}
 
 	/* step 3 : Delay*/
-	mdelay(2);
+	udelay(2000);
 	
 	/* step 4 : init CSR reg*/
 	for (i=0; i<ARRAY_SIZE(i2c_msg_buf_ti); i++) {
@@ -268,14 +271,14 @@ static int32_t sn65dsi83_init(struct panel_spec *self)
 	/* step 5 : Start the DSI video stream */
 	mipi_set_hs_mode();
 	mipi_set_video_mode();
-	mdelay(1);
+	udelay(1000);
 
 	/* step 6 : Set the PLL_EN bit(CSR 0x0D.0) */
 	msg_w.buf = i2c_msg_buf_pll_en;
 	ret_i2c = i2c_transfer(adap, &msg_w, 1);
 
 	/* step 7 : Wait for the PLL_LOCK bit to be set(CSR 0x0A.7) */
-	mdelay(1);
+	udelay(1000);
     
 	/* step 8 : Set the SOFT_RESET bit (CSR 0x09.0) */
 	msg_w.buf = i2c_msg_buf_soft_reset;
@@ -296,7 +299,7 @@ static int32_t chipone_init(struct panel_spec *self)
 		printk("kernel Set EN failed!\n");
 		return 0;
 	}
-	mdelay(1);
+	udelay(1000);
 
     /* init chipone */
     for (i=0; i<ARRAY_SIZE(i2c_msg_buf_c1); i++) {
@@ -390,7 +393,7 @@ static int32_t get_bridge_info(struct panel_spec *self)
 		return 1;
 	}
 	gpio_direction_output(GPIOID_ADDR, 0);// drive ADDR to low
-	mdelay(1);
+	udelay(1000);
 
 	msg_r[0].buf = &reg;
 	msg_r[1].buf = &flag;
@@ -419,11 +422,6 @@ static int32_t nt51017_mipi_lvds_init(struct panel_spec *self)
 {
 	LCD_PRINT("kernel nt51017_mipi_lvds_init\n");
 
-    /* power up */
-    nt51017_power(self, 1);
-
-	/* GRB */
-    
     /* init */
 	if (b_ops.init) {
 		b_ops.init(self);
@@ -435,6 +433,9 @@ static int32_t nt51017_mipi_lvds_init(struct panel_spec *self)
 			b_ops.init(self);
 		}
 	}
+
+	/* power up */
+	nt51017_power(self, 1);
 
 	LCD_PRINT("kernel nt51017_mipi_lvds_init over!\n");
 	
@@ -534,10 +535,10 @@ static struct panel_operations lcd_nt51017_mipi_lvds_operations = {
 
 static struct timing_rgb lcd_nt51017_mipi_lvds_timing = {
 	.hfp = 110,  /* unit: pixel */
-	.hbp = 80,
+	.hbp = 76,
 	.hsync = 4,//4
 	.vfp = 18, /*unit: line*/
-	.vbp = 23,
+	.vbp = 19,
 	.vsync = 4,
 };
 
@@ -563,6 +564,7 @@ struct panel_spec lcd_nt51017_mipi_lvds_spec = {
 	.fps = 60,
 	.type = LCD_MODE_DSI,
 	.direction = LCD_DIRECT_NORMAL,
+	.is_clean_lcd = true,//bug 273509
 	.info = {
 		.mipi = &lcd_nt51017_mipi_lvds_info
 	},

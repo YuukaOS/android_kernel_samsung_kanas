@@ -18,18 +18,34 @@
 #include <linux/clk.h>
 #include <linux/irqreturn.h>
 #include <linux/interrupt.h>
+#ifdef CONFIG_OF
+#include <linux/fb.h>
 
+#include <linux/of_irq.h>
+#include <linux/of_address.h>
+#endif
+
+#include "sprdfb_chip_common.h"
 #include "sprdfb.h"
 #include "sprdfb_panel.h"
-#include "sprdfb_chip_common.h"
 
-#include "dsi/mipi_dsih_local.h"
-#include "dsi/mipi_dsih_dphy.h"
-#include "dsi/mipi_dsih_hal.h"
-#include "dsi/mipi_dsih_api.h"
+#if (defined(CONFIG_FB_SCX30G) || defined(CONFIG_FB_SCX35L))
+#define FB_DSIH_VERSION_1P21A
+#endif
+
+#ifdef FB_DSIH_VERSION_1P21A
+#include "dsi_1_21a/mipi_dsih_local.h"
+#include "dsi_1_21a/mipi_dsih_dphy.h"
+#include "dsi_1_21a/mipi_dsih_hal.h"
+#include "dsi_1_21a/mipi_dsih_api.h"
+#else
+#include "dsi_1_10a/mipi_dsih_local.h"
+#include "dsi_1_10a/mipi_dsih_dphy.h"
+#include "dsi_1_10a/mipi_dsih_hal.h"
+#include "dsi_1_10a/mipi_dsih_api.h"
+#endif
 
 #define DSI_PHY_REF_CLOCK (26*1000)
-
 
 #define DSI_EDPI_CFG (0x6c)
 
@@ -38,176 +54,80 @@ struct sprdfb_dsi_context {
 	bool			is_inited;
 	uint32_t		status;/*0- normal, 1- uninit, 2-abnormal*/
 	struct sprdfb_device	*dev;
-	struct          semaphore sem_dsi_init;
-    uint            dphy_feq;
-    bool            is_fh;
-    uint            feq_change;//LiWei add
 
 	dsih_ctrl_t	dsi_inst;
 };
 
 static struct sprdfb_dsi_context dsi_ctx;
+#ifdef CONFIG_OF
+unsigned long g_dsi_base_addr = 0;
+EXPORT_SYMBOL(g_dsi_base_addr);
+#endif
 
 
 static int32_t sprdfb_dsi_set_lp_mode(void);
 static int32_t sprdfb_dsi_set_ulps_mode(void);
 
-static uint32_t dsi_core_read_function(uint32_t addr, uint32_t offset)
+static uint32_t dsi_core_read_function(unsigned long addr, uint32_t offset)
 {
-	return dispc_glb_read(addr + offset);
+	return __raw_readl(addr + offset);
 }
 
-static void dsi_core_write_function(uint32_t addr, uint32_t offset, uint32_t data)
+static void dsi_core_write_function(unsigned long addr, uint32_t offset, uint32_t data)
 {
 //	__raw_writel(data, addr + offset);
-	sci_glb_write((addr + offset), data, 0xffffffff);
+	__raw_writel(data, (addr + offset));
 }
 
-
-//
-static Trick_Item s_trick_record0[DSI_INT0_MAX]= {
-	//en interval begin dis_cnt en_cnt
-	{1,300,  0,  0,  0},//ack_with_err_0
-	{0,  0,  0,  0,  0},//ack_with_err_1
-	{0,  0,  0,  0,  0},//ack_with_err_2
-	{0,  0,  0,  0,  0},//ack_with_err_3
-	{0,  0,  0,  0,  0},//ack_with_err_4
-	{0,  0,  0,  0,  0},//ack_with_err_5
-	{0,  0,  0,  0,  0},//ack_with_err_6
-	{0,  0,  0,  0,  0},//ack_with_err_7
-	{0,  0,  0,  0,  0},//ack_with_err_8
-	{0,  0,  0,  0,  0},//ack_with_err_9
-	{0,  0,  0,  0,  0},//ack_with_err_10
-	{0,  0,  0,  0,  0},//ack_with_err_11
-	{0,  0,  0,  0,  0},//ack_with_err_12
-	{0,  0,  0,  0,  0},//ack_with_err_13
-	{0,  0,  0,  0,  0},//ack_with_err_14
-	{0,  0,  0,  0,  0},//ack_with_err_15
-	{0,  0,  0,  0,  0},//dphy_errors_0
-	{0,  0,  0,  0,  0},//dphy_errors_1
-	{0,  0,  0,  0,  0},//dphy_errors_2
-	{0,  0,  0,  0,  0},//dphy_errors_3
-	{0,  0,  0,  0,  0},//dphy_errors_4
-};
-
-static Trick_Item s_trick_record1[DSI_INT1_MAX]= {
-	//en interval begin dis_cnt en_cnt
-	{0,  0,  0,  0,  0},//to_hs_tx
-	{0,  0,  0,  0,  0},//to_lp_rx
-	{0,  0,  0,  0,  0},//ecc_single_err
-	{0,  0,  0,  0,  0},//ecc_multi_err
-	{0,  0,  0,  0,  0},//crc_err
-	{0,  0,  0,  0,  0},//pkt_size_err
-	{0,  0,  0,  0,  0},//eopt_err
-	{0,  0,  0,  0,  0},//dpi_pld_wr_err
-	{0,  0,  0,  0,  0},//gen_cmd_wr_err
-	{0,  0,  0,  0,  0},//gen_pld_wr_err
-	{0,  0,  0,  0,  0},//gen_pld_send_err
-	{0,  0,  0,  0,  0},//gen_pld_rd_err
-	{0,  0,  0,  0,  0},//gen_pld_recv_err
-	{0,  0,  0,  0,  0},//dbi_cmd_wr_err
-	{0,  0,  0,  0,  0},//dbi_pld_wr_err
-	{0,  0,  0,  0,  0},//dbi_pld_rd_err
-	{0,  0,  0,  0,  0},//dbi_pld_recv_err
-	{0,  0,  0,  0,  0},//dbi_illegal_comm_err
-};
-
-
-
-
-
-/*
-func:dsi_irq0_trick
-desc:if a xxx interruption come many times in a short time, print the firt one, mask the follows.
-     a fixed-long time later, enable this interruption.
-*/
-void dsi_irq_trick(uint32_t int_id,uint32_t int_status)
+void dsi_core_or_function(unsigned long addr,unsigned int data)
 {
-	static uint32_t mask_irq0_times = 0;
-	static uint32_t open_irq0_times = 0;
-	static uint32_t mask_irq1_times = 0;
-	static uint32_t open_irq1_times = 0;
-	uint32_t i = 0;
-
-	while(i < DSI_INT0_MAX) {
-		if(s_trick_record0[i].trick_en != 0) {
-			if(((int_id == 0) && (int_status & (1UL << i)))
-				&& (s_trick_record0[i].begin_jiffies == 0)) {
-				//disable this interruption
-				DSI_INT_MASK0_SET(i,1);
-				s_trick_record0[i].begin_jiffies = jiffies;
-				s_trick_record0[i].disable_cnt++;
-				mask_irq0_times++;
-				pr_debug("%s[%d]: INT0[%d] disable times:0x%08x \n",__func__,__LINE__,i,s_trick_record0[i].disable_cnt);
-			}
-
-			if((s_trick_record0[i].begin_jiffies > 0)
-				&& ((s_trick_record0[i].begin_jiffies + s_trick_record0[i].interval) < jiffies)) {
-				//re-enable this interruption
-				DSI_INT_MASK0_SET(i,0);
-				s_trick_record0[i].begin_jiffies = 0;
-				s_trick_record0[i].enable_cnt++;
-				open_irq0_times++;
-				pr_debug("%s[%d]: INT0[%d] enable times:0x%08x \n",__func__,__LINE__,i,s_trick_record0[i].enable_cnt);
-			}
-		}
-		i++;
-	}
-
-	i = 0;
-	while(i < DSI_INT1_MAX) {
-		if(s_trick_record1[i].trick_en != 0) {
-			if(((int_id == 1) && (int_status & (1UL << i)))
-				&& (s_trick_record1[i].begin_jiffies == 0)) {
-				//disable this interruption
-				DSI_INT_MASK1_SET(i,1);
-				s_trick_record1[i].begin_jiffies = jiffies;
-				s_trick_record1[i].disable_cnt++;
-				mask_irq1_times++;
-				pr_debug("%s[%d]: INT1[%d] disable times:0x%08x \n",__func__,__LINE__,i,s_trick_record1[i].disable_cnt);
-			}
-
-			if((s_trick_record1[i].begin_jiffies > 0)
-				&& ((s_trick_record1[i].begin_jiffies + s_trick_record1[i].interval) < jiffies)) {
-				//re-enable this interruption
-				DSI_INT_MASK1_SET(i,0);
-				s_trick_record1[i].begin_jiffies = 0;
-				s_trick_record1[i].enable_cnt++;
-				open_irq1_times++;
-				pr_debug("%s[%d]: INT1[%d] enable times:0x%08x \n",__func__,__LINE__,i,s_trick_record1[i].enable_cnt);
-			}
-		}
-		i++;
-	}
-	if(int_status) {
-		printk("%s[%d]:total DSI_mask0:0x%08x DSI_open0:0x%08x; DSI_mask1:0x%08x DSI_open1:0x%08x\n",__func__,__LINE__,
-		mask_irq0_times,open_irq0_times,
-		mask_irq1_times,open_irq1_times);
-	}
+	__raw_writel((__raw_readl(addr) | data), addr);
+}
+void dsi_core_and_function(unsigned long addr,unsigned int data)
+{
+	__raw_writel((__raw_readl(addr) & data), addr);
 }
 
-static uint32_t sot_ever_happened = 0;
+void dsi_irq_trick(void)
+{
+    /*enable ack_with_err_0 interrupt*/
+    DSI_INT_MASK0_SET(0, 0);
+}
+
+//static uint32_t sot_ever_happened = 0;
 static irqreturn_t dsi_isr0(int irq, void *data)
 {
+#ifdef FB_DSIH_VERSION_1P21A
+	uint32_t reg_val = dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_ST0);
+#else
 	uint32_t reg_val = dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_ERROR_ST0);
-	uint32_t mask = 0;
+#endif
+
 	printk(KERN_ERR "sprdfb: [%s](0x%x)!\n", __FUNCTION__, reg_val);
-	
+	/*
 	printk("Warning: sot_ever_happened:(0x%x)!\n",sot_ever_happened);
+	*/
 	if(reg_val & 0x1) {
-		sot_ever_happened = 1;
+/*
+		//sot_ever_happened = 1;
 		mask = dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_ERROR_MSK0);
 		mask |= 0x1;
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_ERROR_MSK0, mask);
+*/
+	    DSI_INT_MASK0_SET(0, 1);
 	}
-	
+
 	//dsi_irq_trick(0,reg_val);
 	return IRQ_HANDLED;
 }
 
 static irqreturn_t dsi_isr1(int irq, void *data)
 {
+#ifdef FB_DSIH_VERSION_1P21A
+	uint32_t reg_val = dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_ST1);
+#else
 	uint32_t reg_val = dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_ERROR_ST1);
+#endif
 	uint32_t i = 0;
 	struct sprdfb_dsi_context *dsi_ctx = (struct sprdfb_dsi_context *)data;
 	struct sprdfb_device *dev = dsi_ctx->dev;
@@ -225,7 +145,7 @@ static irqreturn_t dsi_isr1(int irq, void *data)
 		printk("sprdfb: mipi->lan_number:%d ,mipi->phy_feq:%d \n",mipi->lan_number,mipi->phy_feq);
 		if(NULL == phy){
 			printk("sprdfb: the phy is null \n");
-			dsi_irq_trick(1,reg_val);
+			//dsi_irq_trick(1,reg_val);
 			return IRQ_NONE;
 		}
 
@@ -242,9 +162,37 @@ static irqreturn_t dsi_isr1(int irq, void *data)
 		}
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PWR_UP, 1);
 	}
-	dsi_irq_trick(1,reg_val);
+	//dsi_irq_trick(1,reg_val);
 	return IRQ_HANDLED;
 }
+#ifdef FB_DSIH_VERSION_1P21A
+static irqreturn_t dsi_isr2(int irq, void *data)
+{
+	uint32_t reg_val = 0;
+	struct sprdfb_dsi_context *dsi_ctx = (struct sprdfb_dsi_context *)data;
+	struct sprdfb_device *dev = dsi_ctx->dev;
+
+	printk(KERN_ERR "sprdfb: [%s](0x%x)!\n", __FUNCTION__, reg_val);
+
+	if(MIPI_PLL_TYPE_1 == dev->capability.mipi_pll_type)	/* for PikeL / Pike */
+	{
+		reg_val = dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_MIPI_PLL_INT_STS);
+		if(BIT(0) == (reg_val & BIT(0)))
+		{
+			dsi_core_or_function(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_MIPI_PLL_INT_CLR, BIT(0));
+			printk("sprdfb: [%s], mipi pll interrupt!\n",__FUNCTION__);
+			dsi_core_and_function(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_MIPI_PLL_INT_MSK, 0xFFFFFFFE);
+		}
+	}
+	else if(MIPI_PLL_TYPE_2 == dev->capability.mipi_pll_type)	/* for Sharkl64 / SharklT8*/
+	{
+		dsi_core_or_function(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_MIPI_PLL_INT_CLR, BIT(0));
+		printk("sprdfb: [%s], mipi pll interrupt!\n",__FUNCTION__);
+		dsi_core_or_function(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_MIPI_PLL_INT_EN, BIT(0));
+	}
+	return IRQ_HANDLED;
+}
+#endif
 
 static void dsi_reset(void)
 {
@@ -268,31 +216,50 @@ static int32_t dsi_edpi_setbuswidth(struct info_mipi * mipi)
 		color_coding = COLOR_CODE_24BIT;
 		break;
 	default:
-		printk(KERN_ERR "sprdfb:[%s] fail, invalid video_bus_width\n", __FUNCTION__);
+		printk(KERN_ERR "sprdfb: [%s] fail, invalid video_bus_width\n", __FUNCTION__);
 		return 0;
 	}
 
+#ifdef FB_DSIH_VERSION_1P21A
+	dsi_core_and_function((SPRD_MIPI_DSIC_BASE+R_DSI_HOST_DPI_COLOR_CODE),0xfffffff0);
+	dsi_core_or_function((SPRD_MIPI_DSIC_BASE+R_DSI_HOST_DPI_COLOR_CODE),color_coding);
+#else
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_DPI_CFG, ((uint32_t)color_coding<<2));
+#endif
 	return 0;
 }
 
 
 static int32_t dsi_edpi_init(void)
 {
-	dsi_core_write_function((uint32_t)SPRD_MIPI_DSIC_BASE,  (uint32_t)DSI_EDPI_CFG, 0x10500);
+#ifdef FB_DSIH_VERSION_1P21A
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_EDPI_CMD_SIZE, 0x500);
+#else
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, DSI_EDPI_CFG, 0x10500);
+#endif
 	return 0;
 }
 
 int32_t dsi_dpi_init(struct sprdfb_device *dev)
 {
-	dsih_dpi_video_t dpi_param;
+	dsih_dpi_video_t dpi_param = {0};
 	dsih_error_t result;
 	struct panel_spec* panel = dev->panel;
 	struct info_mipi * mipi = panel->info.mipi;
 
 	dpi_param.no_of_lanes = mipi->lan_number;
 	dpi_param.byte_clock = mipi->phy_feq / 8;
+#ifndef CONFIG_SC_FPGA
 	dpi_param.pixel_clock = dev->dpi_clock/1000;
+#else
+	dpi_param.pixel_clock = 6500;
+#endif
+#ifdef FB_DSIH_VERSION_1P21A
+	dpi_param.max_hs_to_lp_cycles = 4;//110;
+	dpi_param.max_lp_to_hs_cycles = 15;//10;
+	dpi_param.max_clk_hs_to_lp_cycles = 4;//110;
+	dpi_param.max_clk_lp_to_hs_cycles = 15;//10;
+#endif
 
 	switch(mipi->video_bus_width){
 	case 16:
@@ -305,7 +272,7 @@ int32_t dsi_dpi_init(struct sprdfb_device *dev)
 		dpi_param.color_coding = COLOR_CODE_24BIT;
 		break;
 	default:
-		printk(KERN_ERR "sprdfb:[%s] fail, invalid video_bus_width\n", __FUNCTION__);
+		printk(KERN_ERR "sprdfb: [%s] fail, invalid video_bus_width\n", __FUNCTION__);
 		break;
 	}
 
@@ -334,7 +301,11 @@ int32_t dsi_dpi_init(struct sprdfb_device *dev)
 	dpi_param.receive_ack_packets = 0;
 	dpi_param.video_mode = VIDEO_BURST_WITH_SYNC_PULSES;
 	dpi_param.virtual_channel = 0;
+#ifndef CONFIG_FB_LCD_ILI9486S1_MIPI
 	dpi_param.is_18_loosely = 0;
+#else
+	dpi_param.is_18_loosely = 1;
+#endif
 
 	result = mipi_dsih_dpi_video(&(dsi_ctx.dsi_inst), &dpi_param);
 	if(result != OK){
@@ -349,47 +320,18 @@ static void dsi_log_error(const char * string)
 {
 	printk(string);
 }
-int32_t sprdfb_dsi_mipi_fh(struct sprdfb_device *dev, uint phy_feq, bool need_fh)//LiWei add
-{
-    struct timespec now = current_kernel_time();
-    struct info_mipi * mipi = dev->panel->info.mipi;
-    dsih_ctrl_t* dsi_instance = &(dsi_ctx.dsi_inst);
-    dphy_t *phy = &(dsi_instance->phy_instance);
-    dsih_error_t result = OK;
-    dsi_ctx.is_fh = need_fh;
-    if (0==need_fh){
-        dsi_ctx.dphy_feq = phy_feq;
-        dsi_ctx.feq_change ++;
-    } else {
-        dsi_ctx.dphy_feq = dev->panel->info.mipi->phy_feq;
-    }
-
-    down(&dsi_ctx.sem_dsi_init);
-    printk("sprdfb: [%s] dphy_feq = (%d)!\n", __FUNCTION__, dsi_ctx.dphy_feq);
-    printk("sprdfb: [%s] feq_change_time = (%d)!\n", __FUNCTION__, dsi_ctx.feq_change);
-    if(INITIALIZED == dsi_instance->status)
-    {
-        result = mipi_dsih_dphy_fh(phy,mipi->lan_number, dsi_ctx.dphy_feq);
-	dev->curr_mipi_clk = phy_feq;
-    }
-    printk("sprdfb: [%s] nanji_mipi_fh result = (%d)!\n", __FUNCTION__, result);
-    up(&dsi_ctx.sem_dsi_init);
-    return 0;
-}
-
-void sprdfb_dsi_sema_init(void)
-{
-    sema_init(&dsi_ctx.sem_dsi_init,1);//LiWei add
-}
 
 static int32_t dsi_module_init(struct sprdfb_device *dev)
 {
 	int ret = 0;
 	dsih_ctrl_t* dsi_instance = &(dsi_ctx.dsi_inst);
 	dphy_t *phy = &(dsi_instance->phy_instance);
+
 	struct info_mipi * mipi = dev->panel->info.mipi;
 
-	pr_debug(KERN_INFO "sprdfb:[%s]\n", __FUNCTION__);
+	int irq_num_1, irq_num_2, irq_num_3;
+
+	pr_debug(KERN_INFO "sprdfb: [%s]\n", __FUNCTION__);
 
 	if(dsi_ctx.is_inited){
 		printk(KERN_INFO "sprdfb: dsi_module_init. is_inited==true!");
@@ -407,19 +349,28 @@ static int32_t dsi_module_init(struct sprdfb_device *dev)
 	phy->reference_freq = DSI_PHY_REF_CLOCK;
 
 	dsi_instance->address = SPRD_MIPI_DSIC_BASE;
-	dsi_instance->color_mode_polarity =mipi->color_mode_pol;
-	dsi_instance->shut_down_polarity = mipi->shut_down_pol;
+	//dsi_instance->color_mode_polarity =mipi->color_mode_pol;
+	//dsi_instance->shut_down_polarity = mipi->shut_down_pol;
 	dsi_instance->core_read_function = dsi_core_read_function;
 	dsi_instance->core_write_function = dsi_core_write_function;
 	dsi_instance->log_error = dsi_log_error;
 	dsi_instance->log_info = NULL;
 	 /*in our rtl implementation, this is max rd time, not bta time and use 15bits*/
 	dsi_instance->max_bta_cycles = 0x6000;//10;
+#ifndef FB_DSIH_VERSION_1P21A
 	dsi_instance->max_hs_to_lp_cycles = 4;//110;
 	dsi_instance->max_lp_to_hs_cycles = 15;//10;
-	dsi_instance->max_lanes = mipi->lan_number;
+#endif
+	//dsi_instance->max_lanes = mipi->lan_number;
+#ifdef CONFIG_OF
+	irq_num_1 = irq_of_parse_and_map(dev->of_dev->of_node, 1);
+#else
+	irq_num_1 = IRQ_DSI_INTN0;
+#endif
+	printk("sprdfb: dsi irq_num_1 = %d\n", irq_num_1);
 
-	ret = request_irq(IRQ_DSI_INTN0, dsi_isr0, IRQF_DISABLED, "DSI_INT0", &dsi_ctx);
+//	ret = request_irq(IRQ_DSI_INTN0, dsi_isr0, IRQF_DISABLED, "DSI_INT0", &dsi_ctx);
+	ret = request_irq(irq_num_1, dsi_isr0, IRQF_DISABLED, "DSI_INT0", &dsi_ctx);
 	if (ret) {
 		printk(KERN_ERR "sprdfb: dsi failed to request irq int0!\n");
 //		clk_disable(dsi_ctx.clk_dsi);
@@ -427,7 +378,15 @@ static int32_t dsi_module_init(struct sprdfb_device *dev)
 		printk(KERN_ERR "sprdfb: dsi request irq int0 OK!\n");
 	}
 
-	ret = request_irq(IRQ_DSI_INTN1, dsi_isr1, IRQF_DISABLED, "DSI_INT1", &dsi_ctx);
+#ifdef CONFIG_OF
+	irq_num_2 = irq_of_parse_and_map(dev->of_dev->of_node, 2);
+#else
+	irq_num_2 = IRQ_DSI_INTN1;
+#endif
+	printk("sprdfb: dsi irq_num_2 = %d\n", irq_num_2);
+
+//	ret = request_irq(IRQ_DSI_INTN1, dsi_isr1, IRQF_DISABLED, "DSI_INT1", &dsi_ctx);
+	ret = request_irq(irq_num_2, dsi_isr1, IRQF_DISABLED, "DSI_INT1", &dsi_ctx);
 	if (ret) {
 		printk(KERN_ERR "sprdfb: dsi failed to request irq int1!\n");
 //		clk_disable(dsi_ctx.clk_dsi);
@@ -435,10 +394,63 @@ static int32_t dsi_module_init(struct sprdfb_device *dev)
 		printk(KERN_ERR "sprdfb: dsi request irq int1 OK!\n");
 	}
 
+#ifdef FB_DSIH_VERSION_1P21A
+	if((dev->capability.mipi_pll_type > MIPI_PLL_TYPE_NONE)
+		&& (dev->capability.mipi_pll_type < MIPI_PLL_TYPE_LIMIT))
+	{
+#ifdef CONFIG_OF
+		irq_num_3 = irq_of_parse_and_map(dev->of_dev->of_node, 3);
+#else
+		irq_num_3 = IRQ_DSI_INTN2;
+#endif
+		printk("sprdfb: dsi irq_num_3 = %d\n", irq_num_3);
+
+		ret = request_irq(irq_num_3, dsi_isr2, IRQF_DISABLED, "DSI_INT2", &dsi_ctx);
+		if (ret) {
+			printk(KERN_ERR "sprdfb: dsi failed to request irq int2!\n");
+		}else{
+			printk(KERN_ERR "sprdfb: dsi request irq int2 OK!\n");
+		}
+
+		if(MIPI_PLL_TYPE_1 == dev->capability.mipi_pll_type) {
+			dsi_core_and_function(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_MIPI_PLL_INT_MSK, 0xFFFFFFFE);
+		} else if (MIPI_PLL_TYPE_2 == dev->capability.mipi_pll_type) {
+			dsi_core_and_function(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_MIPI_PLL_INT_MSK, 0xFFFFFFFE);
+			dsi_core_or_function(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_MIPI_PLL_INT_EN, BIT(0));
+		}
+	}
+#endif
+
 	dsi_ctx.is_inited = true;
 
 	return 0;
 }
+
+#ifdef CONFIG_FB_DYNAMIC_FREQ_SCALING
+int sprdfb_dsi_chg_dphy_freq(struct sprdfb_device *fb_dev,
+				u32 dphy_freq)
+{
+	dsih_error_t result = OK;
+	dsih_ctrl_t *ctrl = &(dsi_ctx.dsi_inst);
+	struct info_mipi *mipi = fb_dev->panel->info.mipi;
+
+	if (ctrl->status == INITIALIZED) {
+		pr_info("Let's do update D-PHY frequency(%u)\n", dphy_freq);
+		ctrl->phy_instance.phy_keep_work = true;
+		result = mipi_dsih_dphy_configure(&ctrl->phy_instance,
+				mipi->lan_number, dphy_freq);
+		if (result != OK) {
+			pr_err("[%s]: mipi_dsih_dphy_configure fail (%d)\n",
+					__func__, result);
+			ctrl->phy_instance.phy_keep_work = false;
+			return -1;
+		}
+		ctrl->phy_instance.phy_keep_work = false;
+	}
+	mipi->phy_feq = dphy_freq;
+	return 0;
+}
+#endif
 
 int32_t sprdfb_dsih_init(struct sprdfb_device *dev)
 {
@@ -446,10 +458,14 @@ int32_t sprdfb_dsih_init(struct sprdfb_device *dev)
 	dsih_ctrl_t* dsi_instance = &(dsi_ctx.dsi_inst);
 	dphy_t *phy = &(dsi_instance->phy_instance);
 	struct info_mipi * mipi = dev->panel->info.mipi;
-	int i = 0;
-
+	int wait_count = 0;
+#ifdef FB_DSIH_VERSION_1P21A
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_MSK0, 0x1fffff);
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_MSK1, 0x3ffff);
+#else
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK0, 0x1fffff);
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK1, 0x3ffff);
+#endif
 
 	if(SPRDFB_MIPI_MODE_CMD == mipi->work_mode){
 		dsi_edpi_init();
@@ -466,7 +482,12 @@ int32_t sprdfb_dsih_init(struct sprdfb_device *dev)
 */
 //	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK0, 0x1fffff);
 //	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK1, 0x3ffff);
+
 	dsi_instance->phy_feq = dev->panel->info.mipi->phy_feq;
+	dsi_instance->max_lanes = dev->panel->info.mipi->lan_number;
+	dsi_instance->color_mode_polarity =dev->panel->info.mipi->color_mode_pol;
+	dsi_instance->shut_down_polarity = dev->panel->info.mipi->shut_down_pol;
+
 	result = mipi_dsih_open(dsi_instance);
 	if(OK != result){
 		printk(KERN_ERR "sprdfb: [%s]: mipi_dsih_open fail (%d)!\n", __FUNCTION__, result);
@@ -474,21 +495,25 @@ int32_t sprdfb_dsih_init(struct sprdfb_device *dev)
 		return -1;
 	}
 
-	if (0 == dsi_ctx.is_fh) {//LiWei modify
-		result = mipi_dsih_dphy_configure(phy,  mipi->lan_number, dsi_ctx.dphy_feq);
-	} else {
 	result = mipi_dsih_dphy_configure(phy,  mipi->lan_number, mipi->phy_feq);
-	}
 	if(OK != result){
 		printk(KERN_ERR "sprdfb: [%s]: mipi_dsih_dphy_configure fail (%d)!\n", __FUNCTION__, result);
 		dsi_ctx.status = 1;
 		return -1;
 	}
 
-	while(5 != (dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_STATUS) & 5)){
-		if(0x0 == ++i%500000){
+	while(5 != (dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_STATUS) & 5) &&
+		(wait_count < 100000)){
+		udelay(3);
+		if(0x0 == ++wait_count%1000){
 			printk("sprdfb: [%s] warning: busy waiting!\n", __FUNCTION__);
 		}
+	}
+	if(wait_count >= 100000){
+		printk("sprdfb: [%s] Errior: dsi phy can't be locked!!!\n", __FUNCTION__);
+	}
+	if(wait_count >= 100000){
+		printk("sprdfb: [%s] Errior: dsi phy can't be locked!!!\n", __FUNCTION__);
 	}
 
 	if(SPRDFB_MIPI_MODE_CMD == mipi->work_mode){
@@ -527,6 +552,9 @@ int32_t sprdfb_dsih_init(struct sprdfb_device *dev)
 		dsi_dpi_init(dev);
 	}
 
+#ifdef FB_DSIH_VERSION_1P21A
+	mipi_dsih_dphy_enable_nc_clk(&(dsi_instance->phy_instance), false);
+#endif
 	dsi_ctx.status = 0;
 
 	return 0;
@@ -536,30 +564,46 @@ int32_t sprdfb_dsi_init(struct sprdfb_device *dev)
 {
 	dsih_error_t result = OK;
 	dsih_ctrl_t* dsi_instance = &(dsi_ctx.dsi_inst);
-	dsi_ctx.dev = dev;
-	static bool is_inited = false;
-	if (is_inited==false){
-        dsi_ctx.is_fh = true;
-		sema_init(&dsi_ctx.sem_dsi_init,1);//LiWei add
-		is_inited = true;
-		printk("mipi_fh sem_dsi_init\n");
-	}
+#ifdef CONFIG_OF
+	struct resource r;
+#endif
 
-	down(&dsi_ctx.sem_dsi_init);//LiWei add
+	dsi_ctx.dev = dev;
+
+#ifdef CONFIG_OF
+	if(0 == g_dsi_base_addr){
+		if(0 != of_address_to_resource(dev->of_dev->of_node, 1, &r)){
+			printk(KERN_ERR "sprdfb: sprdfb_dsi_init fail. (can't get register base address)\n");
+			return -1;
+		}
+		g_dsi_base_addr = (unsigned long)ioremap_nocache(r.start, resource_size(&r));
+	}
+	if (0 == g_dsi_base_addr){
+		printk("sprdfb: g_dsi_base_addr = 0!(0x%ul)\n", r.start);
+		return -ENOMEM;
+	}
+	printk("sprdfb: set g_dsi_base_addr = 0x%lx\n", g_dsi_base_addr);
+#endif
 
 
 	if(!dsi_ctx.is_inited){
 		//init
 		if(dev->panel_ready){
 			//panel ready
-			printk(KERN_INFO "sprdfb:[%s]: dsi has alread initialized\n", __FUNCTION__);
+			printk(KERN_INFO "sprdfb: [%s]: dsi has alread initialized\n", __FUNCTION__);
 			dsi_instance->status = INITIALIZED;
+			dsi_instance->phy_instance.status = INITIALIZED;
 			dsi_module_init(dev);
+#ifdef FB_DSIH_VERSION_1P21A
+			dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_INT_MSK0, 0x0);
+			dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_INT_MSK1, 0x800);
+#else
 			dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK0, 0x0);
 			dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK1, 0x800);
+#endif
 		}else{
 			//panel not ready
-			printk(KERN_INFO "sprdfb:[%s]: dsi is not initialized\n", __FUNCTION__);
+			printk(KERN_INFO "sprdfb: [%s]: dsi is not initialized\n", __FUNCTION__);
 			dsi_enable();
 			dsi_reset();
 			dsi_module_init(dev);
@@ -567,12 +611,11 @@ int32_t sprdfb_dsi_init(struct sprdfb_device *dev)
 		}
 	}else{
 		//resume
-		printk(KERN_INFO "sprdfb:[%s]: resume\n", __FUNCTION__);
+		printk(KERN_INFO "sprdfb: [%s]: resume\n", __FUNCTION__);
 		dsi_enable();
 		dsi_reset();
 		result=sprdfb_dsih_init(dev);
 	}
-	up(&dsi_ctx.sem_dsi_init);//LiWei add
 
 	return result;
 }
@@ -582,7 +625,11 @@ int32_t sprdfb_dsi_uninit(struct sprdfb_device *dev)
 	dsih_error_t result;
 	dsih_ctrl_t* dsi_instance = &(dsi_ctx.dsi_inst);
 	printk(KERN_INFO "sprdfb: [%s], dev_id = %d\n",__FUNCTION__, dev->dev_id);
+#ifdef FB_DSIH_VERSION_1P21A
+	mipi_dsih_dphy_enable_hs_clk(&(dsi_instance->phy_instance), false);
+#else
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_IF_CTRL, 0);
+#endif
 	result = mipi_dsih_close(&(dsi_ctx.dsi_inst));
 	dsi_instance->status = NOT_INITIALIZED;
 
@@ -593,8 +640,7 @@ int32_t sprdfb_dsi_uninit(struct sprdfb_device *dev)
 		return -1;
 	}
 
-	mdelay(10);
-
+	msleep(10);
 	dsi_disable();
 	return 0;
 }
@@ -647,23 +693,40 @@ int32_t sprdfb_dsi_ready(struct sprdfb_device *dev)
 
 	if(SPRDFB_MIPI_MODE_CMD == mipi->work_mode){
 		mipi_dsih_cmd_mode(&(dsi_ctx.dsi_inst), 1);
+#ifdef FB_DSIH_VERSION_1P21A
+		mipi_dsih_dphy_enable_hs_clk(&(dsi_ctx.dsi_inst.phy_instance), true);
+		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_CMD_MODE_CFG, 0x0);
+#else
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_CMD_MODE_CFG, 0x1);
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_IF_CTRL, 0x1);
+#endif
 	}else{
+#ifdef FB_DSIH_VERSION_1P21A
+		mipi_dsih_dphy_enable_hs_clk(&(dsi_ctx.dsi_inst.phy_instance), true);
+#else
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_IF_CTRL, 0x1);
+#endif
 		mipi_dsih_video_mode(&(dsi_ctx.dsi_inst), 1);
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PWR_UP, 0);
 		udelay(100);
 		dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PWR_UP, 1);
-		mdelay(3);
-
+		usleep_range(3000, 3500);
+#ifdef FB_DSIH_VERSION_1P21A
+		dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_ST0);
+		dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_INT_ST1);
+#else
 		dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_ERROR_ST0);
 		dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_ERROR_ST1);
+#endif
 	}
 
+#ifdef FB_DSIH_VERSION_1P21A
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_INT_MSK0, 0x0);
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_INT_MSK1, 0x800);
+#else
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK0, 0x0);
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE,  R_DSI_HOST_ERROR_MSK1, 0x800);
-
+#endif
 	return 0;
 }
 
@@ -698,14 +761,21 @@ static int32_t sprdfb_dsi_set_video_mode(void)
 
 static int32_t sprdfb_dsi_set_lp_mode(void)
 {
+#ifndef FB_DSIH_VERSION_1P21A
 	uint32_t reg_val;
+#endif
 	pr_debug(KERN_INFO "sprdfb: [%s]\n",__FUNCTION__);
 
 	mipi_dsih_cmd_mode(&(dsi_ctx.dsi_inst), 1);
+#ifdef FB_DSIH_VERSION_1P21A
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_CMD_MODE_CFG, 0x01ffff00);
+	mipi_dsih_dphy_enable_hs_clk(&(dsi_ctx.dsi_inst.phy_instance), false);
+#else
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_CMD_MODE_CFG, 0x1fff);
 	reg_val = dsi_core_read_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_IF_CTRL);
 	reg_val = reg_val & (~(BIT(0)));
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_IF_CTRL,  reg_val);
+#endif
 	return 0;
 }
 
@@ -714,8 +784,13 @@ static int32_t sprdfb_dsi_set_hs_mode(void)
 	pr_debug(KERN_INFO "sprdfb: [%s]\n",__FUNCTION__);
 
 	mipi_dsih_cmd_mode(&(dsi_ctx.dsi_inst), 1);
+#ifdef FB_DSIH_VERSION_1P21A
+	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_CMD_MODE_CFG, 0x0);
+	mipi_dsih_dphy_enable_hs_clk(&(dsi_ctx.dsi_inst.phy_instance), true);
+#else
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_CMD_MODE_CFG, 0x1);
 	dsi_core_write_function(SPRD_MIPI_DSIC_BASE, R_DSI_HOST_PHY_IF_CTRL, 0x1);
+#endif
 	return 0;
 }
 
@@ -760,6 +835,25 @@ static int32_t sprdfb_dsi_gen_write(uint8_t *param, uint16_t param_length)
 	return 0;
 }
 
+#define LCM_SEND(len) ((1 << 24)| len)
+#define LCM_TAG_MASK  ((1 << 24) -1)
+
+static unsigned char set_bl_seq[] = {
+#ifndef CONFIG_MACH_TSHARK2TABE
+	0x51, 0xFF
+#else
+	0xF5, 0x8B
+#endif
+};
+
+void backlight_control(int brigtness)
+{
+	set_bl_seq[1] = brigtness;
+	sprdfb_dsi_gen_write(set_bl_seq, LCM_SEND(2) & LCM_TAG_MASK);
+}
+EXPORT_SYMBOL(backlight_control);
+
+
 static int32_t sprdfb_dsi_gen_read(uint8_t *param, uint16_t param_length, uint8_t bytes_to_read, uint8_t *read_buffer)
 {
 	uint16_t result;
@@ -767,9 +861,13 @@ static int32_t sprdfb_dsi_gen_read(uint8_t *param, uint16_t param_length, uint8_
 	result = mipi_dsih_gen_rd_cmd(&(dsi_ctx.dsi_inst), 0, param, param_length, bytes_to_read, read_buffer);
 
 	reg_val = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_PHY_STATUS);
+#ifdef FB_DSIH_VERSION_1P21A
+	reg_val_1 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_INT_ST0);
+	reg_val_2 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_INT_ST1);
+#else
 	reg_val_1 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_ERROR_ST0);
 	reg_val_2 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_ERROR_ST1);
-
+#endif
 	if(0 != (reg_val & 0x2)){
 		printk("sprdfb: [%s] mipi read hang (0x%x)!\n", __FUNCTION__, reg_val);
 		dsi_ctx.status = 2;
@@ -806,9 +904,13 @@ static int32_t sprdfb_dsi_dcs_read(uint8_t command, uint8_t bytes_to_read, uint8
 
 	result = mipi_dsih_dcs_rd_cmd(&(dsi_ctx.dsi_inst), 0, command, bytes_to_read, read_buffer);
 	reg_val = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_PHY_STATUS);
+#ifdef FB_DSIH_VERSION_1P21A
+	reg_val_1 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_INT_ST0);
+	reg_val_2 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_INT_ST1);
+#else
 	reg_val_1 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_ERROR_ST0);
 	reg_val_2 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_ERROR_ST1);
-
+#endif
 	if(0 != (reg_val & 0x2)){
 		printk("sprdfb: [%s] mipi read hang (0x%x)!\n", __FUNCTION__, reg_val);
 		dsi_ctx.status = 2;
@@ -836,6 +938,17 @@ static int32_t sprd_dsi_force_write(uint8_t data_type, uint8_t *p_params, uint16
 	return iRtn;
 }
 
+#ifdef FB_DSIH_VERSION_1P21A
+static int32_t sprd_dsi_write(uint8_t data_type, uint8_t *p_params, uint16_t param_length)
+{
+	int32_t iRtn = 0;
+
+	iRtn = mipi_dsih_wr_packet(&(dsi_ctx.dsi_inst), 0, data_type,  p_params, param_length);
+
+	return iRtn;
+}
+#endif
+
 static int32_t sprd_dsi_force_read(uint8_t command, uint8_t bytes_to_read, uint8_t * read_buffer)
 {
 	int32_t iRtn = 0;
@@ -844,9 +957,13 @@ static int32_t sprd_dsi_force_read(uint8_t command, uint8_t bytes_to_read, uint8
 	iRtn = mipi_dsih_gen_rd_packet(&(dsi_ctx.dsi_inst),  0,  6,  0, command,  bytes_to_read, read_buffer);
 
 	reg_val = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_PHY_STATUS);
+#ifdef FB_DSIH_VERSION_1P21A
+	reg_val_1 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_INT_ST0);
+	reg_val_2 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_INT_ST1);
+#else
 	reg_val_1 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_ERROR_ST0);
 	reg_val_2 = dispc_glb_read(SPRD_MIPI_DSIC_BASE + R_DSI_HOST_ERROR_ST1);
-
+#endif
 	if(0 != (reg_val & 0x2)){
 		printk("sprdfb: [%s] mipi read hang (0x%x)!\n", __FUNCTION__, reg_val);
 		dsi_ctx.status = 2;
@@ -864,7 +981,7 @@ static int32_t sprd_dsi_force_read(uint8_t command, uint8_t bytes_to_read, uint8
 		return -1;
 	}
 
-	return 0;
+	return iRtn;
 }
 
 static int32_t sprd_dsi_eotp_set(uint8_t rx_en, uint8_t tx_en)
@@ -894,7 +1011,11 @@ struct ops_mipi sprdfb_mipi_ops = {
 	.mipi_dcs_read = sprdfb_dsi_dcs_read,
 	.mipi_force_write = sprd_dsi_force_write,
 	.mipi_force_read = sprd_dsi_force_read,
+#ifdef FB_DSIH_VERSION_1P21A
+	.mipi_write = sprd_dsi_write,
+#endif
 	.mipi_eotp_set = sprd_dsi_eotp_set,
 };
+
 
 
