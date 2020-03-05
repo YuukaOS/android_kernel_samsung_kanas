@@ -114,13 +114,31 @@ static atomic_t shift_adj = ATOMIC_INIT(0);
  * killing vital user applications such as the virtual keyboard
  * when undergoing such memory pressure.
  */
-static short adj_max_shift = 353;
+static short adj_max_shift = 800;
 module_param_named(adj_max_shift, adj_max_shift, int, S_IRUGO | S_IWUSR);
 
 /* User knob to enable/disable adaptive lmk feature */
 static int enable_adaptive_lmk;
 module_param_named(enable_adaptive_lmk, enable_adaptive_lmk, int,
 	S_IRUGO | S_IWUSR);
+
+/*
+ * Keep a counter that increments up to a threshold.
+ * shift_adj WILL only be ticked to 1 when the counter reaches that
+ * threshold. The counter will be incremented when the vmpressure
+ * is 90 or above, decremented otherwise, and should always be
+ * non-negative or be above the threshold.
+ * Setting shift_adj to 1 or receiving a vmpressure event
+ * a second after last event will reset the counter.
+ *
+ * The reason to have this counter is to prevent paranoidly flipping
+ * shift_adj to true due to a temporary usage spike or maniacally
+ * flipping it back on and on again in a real case of trashing.
+ */
+static int vmp_threshold = 10;
+static int vmp_events = 0;
+module_param_named(vmp_threshold, vmp_threshold, int, S_IRUGO | S_IWUSR);
+struct timespec vmp_last_time = {};
 
 /*
  * This parameter controls the behaviour of LMK when vmpressure is in
@@ -165,9 +183,25 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 	int other_free, other_file;
 	unsigned long pressure = action;
 	int array_size = ARRAY_SIZE(lowmem_adj);
+	struct timespec cur_time;
 
 	if (!enable_adaptive_lmk)
 		return 0;
+
+	getnstimeofday(&cur_time);
+	if (vmp_last_time.tv_sec < cur_time.tv_sec)
+		vmp_events = 0;
+	vmp_last_time = cur_time;
+
+	if (pressure >= 90)
+		vmp_events += 1;
+	else
+		vmp_events -= 1;
+
+	if (vmp_events > vmp_threshold)
+		vmp_events = vmp_threshold;
+	else if (vmp_events < 0)
+		vmp_events = 0;
 
 	if (pressure >= 95) {
 		other_file = global_page_state(NR_FILE_PAGES) -
@@ -175,7 +209,9 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 			total_swapcache_pages();
 		other_free = global_page_state(NR_FREE_PAGES);
 
-		atomic_set(&shift_adj, 1);
+		if (vmp_events == vmp_threshold)
+			atomic_set(&shift_adj, 1);
+
 		trace_almk_vmpressure(pressure, other_free, other_file);
 	} else if (pressure >= 90) {
 		if (lowmem_adj_size < array_size)
@@ -191,12 +227,17 @@ static int lmk_vmpressure_notifier(struct notifier_block *nb,
 
 		if ((other_free < lowmem_minfree[array_size - 1]) &&
 			(other_file < vmpressure_file_min)) {
-				atomic_set(&shift_adj, 1);
+				if (vmp_events == vmp_threshold)
+					atomic_set(&shift_adj, 1);
+
 				trace_almk_vmpressure(pressure, other_free,
 					other_file);
 		}
+
 	}
 
+	if (vmp_events == vmp_threshold)
+		vmp_events = 0;
 	return 0;
 }
 
