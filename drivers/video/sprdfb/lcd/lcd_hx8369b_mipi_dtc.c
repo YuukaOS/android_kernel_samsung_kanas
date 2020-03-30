@@ -348,6 +348,26 @@ static int32_t hx8369b_after_suspend_dtc(struct panel_spec *self)
    return 0;
 }
 
+#if defined(CONFIG_BACKLIGHT_RT4502)
+extern void lcd_backlight_off(int num);
+
+/*
+ * This is a hack to prevent seeing white screens during suspend
+ * or the FB blanking procedure. These white screens seemed to be
+ * cause by having a FB blanking callback present causing the
+ * backlight rt4502 not to be powered off on time.
+ */
+int32_t hx8369b_set_brightness(struct panel_spec *self, uint16_t brightness)
+{
+	// Only Allow turning the BL off
+	if (brightness != 0)
+		return 0;
+
+	lcd_backlight_off(0);
+	return 0;
+}
+#endif
+
 #ifdef CONFIG_LCD_ESD_RECOVERY
 extern void rt4502_backlight_on(void);
 extern void rt4502_backlight_off(void);
@@ -368,6 +388,9 @@ static struct panel_operations lcd_hx8369b_mipi_operations_dtc = {
 	.panel_enter_sleep = hx8369b_enter_sleep_dtc,
 	.panel_esd_check = hx8369b_check_esd_dtc,
 	.panel_after_suspend = hx8369b_after_suspend_dtc,
+#if defined(CONFIG_BACKLIGHT_RT4502)
+	.panel_set_brightness = hx8369b_set_brightness,
+#endif
 };
 
 static struct timing_rgb lcd_hx8369b_mipi_timing_dtc = {
