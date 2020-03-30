@@ -35,6 +35,7 @@ struct esd_det_info {
 	bool (*is_active)(void *pdata);	/* device activated */
 	int (*is_normal)(void *pdata);	/* device esd checking */
 	int (*recover)(void *pdata);	/* device recovery */
+	void (*backlight_power)(int on);/* device backlight */
 };
 
 int esd_det_init(struct esd_det_info *det);

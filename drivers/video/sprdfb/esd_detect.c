@@ -59,8 +59,17 @@ static void esd_work(struct work_struct *work)
 	}
 
 	do {
+		if (esd->backlight_power)
+			esd->backlight_power(0);
+
 		if (esd->recover)
 			esd->recover(esd->pdata);
+
+		if (esd->backlight_power) {
+			mdelay(100);
+			esd->backlight_power(1);
+		}
+
 	} while ((esd_status(esd) != ESD_STATUS_OK) && --retry);
 
 	pr_info("[LCD] %s, %s to recover\n", __func__,
