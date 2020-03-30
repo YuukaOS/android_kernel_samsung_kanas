@@ -6,8 +6,6 @@
 #include <linux/mutex.h>
 #include "esd_detect.h"
 
-static int off_esd=0;
-
 static inline int esd_det_clear_irq(int irq)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
@@ -93,7 +91,7 @@ static irqreturn_t esd_irq_handler(int irq, void *dev_id)
 
 int esd_det_disable(struct esd_det_info *esd)
 {
-	if(off_esd)
+	if(!esd || esd->gpio <= 0)
 		return -1;
 	
 	if (esd->type == ESD_POLLING)
@@ -106,8 +104,9 @@ int esd_det_disable(struct esd_det_info *esd)
 
 int esd_det_enable(struct esd_det_info *esd)
 {
-	if(off_esd)
+	if(!esd || esd->gpio <= 0)
 		return -1;
+
 	if (esd->type == ESD_POLLING)
 		queue_delayed_work(esd->wq, &esd->work, HZ);
 	else {
@@ -123,10 +122,8 @@ int esd_det_init(struct esd_det_info *esd)
 {
 	int ret, irq = 0;
 
-	if(esd->gpio <=0){
-		off_esd = 1;
+	if(esd->gpio <= 0)
 		return -1;
-	}
 
 	irq= gpio_to_irq(esd->gpio);
 
