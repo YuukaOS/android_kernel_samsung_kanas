@@ -398,6 +398,87 @@ static ssize_t sysfs_write_esd(struct device *dev,
 }
 #endif
 
+#ifdef CONFIG_FB_DYNAMIC_FREQ_SCALING
+/*
+ * For compatibility with the sprdfb_notifier or the virtual dispc device.
+ * Works once for the first device only.
+ */
+static struct class *g_dispc_class = NULL;
+
+/*
+ * A basic version of sysfs_rd_current_fps()
+ * Returns only the requested fps value rather than with
+ * the original fps value and the current fps value
+ */
+static ssize_t sysfs_rd_current_fps_basic(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct fb_info *fbi = dev_get_drvdata(dev);
+	struct sprdfb_device *fb_dev = (struct sprdfb_device *)fbi->par;
+	struct attr_info *attr_info = fb_dev->priv1;
+
+	if (fb_dev->panel) {
+		pr_err("panel doesn't exist.");
+		return -ENXIO;
+	}
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", attr_info->curr_fps);
+}
+static DEVICE_ATTR(fps, S_IRUGO | S_IWUSR, sysfs_rd_current_fps_basic, sysfs_write_fps);
+
+void sprdfb_destroy_virtual_dispc(void)
+{
+	if (!g_dispc_class)
+		return;
+
+	device_destroy(g_dispc_class, 0);
+	class_destroy(g_dispc_class);
+
+	return;
+}
+
+int sprdfb_create_virtual_dispc(struct sprdfb_device *fb_dev)
+{
+	struct device *dispc_dev;
+
+	if (NULL != g_dispc_class) {
+		pr_info("dispc class has been already created.\n");
+		return -1;
+	}
+
+	g_dispc_class = class_create(THIS_MODULE, "dispc");
+
+	if (!g_dispc_class) {
+		pr_err("Failed to create dispc class!\n");
+		return -1;
+	}
+
+	dispc_dev = device_create(g_dispc_class, NULL, 0, "%s", "dispc");
+	if (!dispc_dev) {
+		pr_err("Failed to create the virtual dispc device!\n");
+		goto destroy_class;
+	}
+
+	dev_set_drvdata(dispc_dev, fb_dev->fb);
+
+	if (device_create_file(dispc_dev, &dev_attr_fps) < 0) {
+		pr_err("Failed to create device file(%s)!\n", dev_attr_fps.attr.name);
+		goto destroy_device;
+	}
+
+	return 0;
+
+destroy_device:
+	device_destroy(g_dispc_class, 0);
+
+destroy_class:
+	class_destroy(g_dispc_class);
+
+	return -1;
+
+}
+#endif
+
 int sprdfb_create_sysfs(struct sprdfb_device *fb_dev)
 {
 	int rc;
@@ -423,12 +504,22 @@ int sprdfb_create_sysfs(struct sprdfb_device *fb_dev)
 	}
 	sema_init(&attr->sem, 1);
 
+#ifdef CONFIG_FB_DYNAMIC_FREQ_SCALING
+	if (0 > sprdfb_create_virtual_dispc(fb_dev))
+		pr_warn("Cannot re-create the dispc device.\n");
+#endif
+
 	return rc;
 }
 
 void sprdfb_remove_sysfs(struct sprdfb_device *fb_dev)
 {
 	struct attr_info *attr = fb_dev->priv1;
+
+#ifdef CONFIG_FB_DYNAMIC_FREQ_SCALING
+	sprdfb_destroy_virtual_dispc();
+#endif
+
 	sysfs_remove_group(&fb_dev->fb->dev->kobj, &sprdfb_attrs_group);
 
 	if (attr)
