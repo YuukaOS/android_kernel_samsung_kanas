@@ -546,7 +546,19 @@ void bak_restore_aon(int bak)
 }
 void disable_ana_module(void)
 {
-	sci_adi_set(ANA_REG_GLB_LDO_PD_CTRL, BIT_LDO_SD_PD | /* BIT_LDO_SIM0_PD | BIT_LDO_SIM1_PD | */ BIT_LDO_SIM2_PD | BIT_LDO_CAMA_PD |\
+	/*
+	 * These bits are not set:
+	 *    BIT_LDO_SD_PD - SD card
+	 *    BIT_LDO_SIM0_PD - SIM slot 0 (beside and hidden by the battery)
+	 *    BIT_LDO_SIM1_PD - SIM slot 1 (hotswappable side)
+	 *
+	 * Enabling them will cause the actual components to shutdown
+	 * And the system may register is as a HW mulfunction.
+	 * For example,
+	 * SD Card may start to deny MMC requests even after resume.
+	 * SIM slot 0 and 1 will stop recieving unsolicited responses.
+	 */
+	sci_adi_set(ANA_REG_GLB_LDO_PD_CTRL, BIT_LDO_SIM2_PD | BIT_LDO_CAMA_PD |\
 		BIT_LDO_CAMD_PD | BIT_LDO_CAMIO_PD | BIT_LDO_CAMMOT_PD  | BIT_DCDC_WPA_PD);
 }
 void bak_restore_ana(int bak)

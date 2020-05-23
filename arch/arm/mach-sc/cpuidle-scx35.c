@@ -314,9 +314,7 @@ static int sc_enter_idle(struct cpuidle_device *dev,
 			else
 				cpu_do_idle();
 #else
-// 			sci_glb_set(REG_AP_AHB_MCU_PAUSE, BIT_MCU_SYS_SLEEP_EN);
 			cpu_do_idle();
-// 			sci_glb_clr(REG_AP_AHB_MCU_PAUSE, BIT_MCU_SYS_SLEEP_EN);
 #endif
 			sc_cpuidle_light_sleep_dis();
 		}
