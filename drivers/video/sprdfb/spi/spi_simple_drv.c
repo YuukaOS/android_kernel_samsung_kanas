@@ -1,9 +1,6 @@
 #include <linux/io.h>
 #include <linux/delay.h>
 #include <linux/clk.h>
-#ifdef CONFIG_OF
-#include <linux/fb.h>
-#endif
 
 #include <mach/hardware.h>
 #include <mach/sci.h>
@@ -11,22 +8,12 @@
 
 #include "spi_simple_drv.h"
 
-#ifdef CONFIG_OF
-#define FB_SPI_CLOCK ("fb_spi_clock")
-#define FB_SPI_CLOCK_PARENT ("fb_spi_clock_parent")
-#endif
-
 static u32  used_spi_reg_base;
 
-#ifdef CONFIG_OF
-static void SPI_Enable(struct device *device,bool is_en)
-#else
 static void SPI_Enable( uint32_t spi_id, bool is_en)
-#endif
 {
 	struct clk *spi_clk;
 
-#ifndef CONFIG_OF
 	switch (spi_id) {
 	case 0:
 		spi_clk = clk_get(NULL, "clk_spi0");
@@ -40,22 +27,14 @@ static void SPI_Enable( uint32_t spi_id, bool is_en)
 	default:
 		BUG_ON(1);
 	}
-#else
-	spi_clk = of_clk_get_by_name(device->of_node, FB_SPI_CLOCK);
-	if (IS_ERR(spi_clk)) {
-		printk(KERN_WARNING "sprdfb: get spi clock fail!\n");
-		return ;
-	} else {
-		pr_debug(KERN_INFO "sprdfb: get spi clock ok!\n");
-	}
-#endif
+
 	if(is_en)
 	{
-		clk_prepare_enable(spi_clk);
+		clk_enable(spi_clk);
 	}
 	else
 	{
-		clk_disable_unprepare(spi_clk);
+		clk_disable(spi_clk);
 	}
 }
 
@@ -81,19 +60,15 @@ static void SPI_Reset( uint32_t spi_id)
 	}
 
 	sci_glb_set(rst_reg, rst_bit);
-	msleep(50);
+	mdelay(50);
 	sci_glb_clr(rst_reg, rst_bit);
 }
 
 /*just set the spi src clk = 26Mhz*/
-#ifdef CONFIG_OF
-static void SPI_ClkSetting(struct device *device)
-#else
 static void SPI_ClkSetting(uint32_t spi_id)
-#endif
 {
 	struct clk *spi_clk, *spi_src_clk;
-#ifndef CONFIG_OF
+
 	switch (spi_id) {
 	case 0:
 		spi_clk = clk_get(NULL, "clk_spi0");
@@ -107,23 +82,8 @@ static void SPI_ClkSetting(uint32_t spi_id)
 	default:
 		BUG_ON(1);
 	}
+
 	spi_src_clk = clk_get(NULL, "ext_26m");
-#else
-	spi_clk = of_clk_get_by_name(device->of_node, FB_SPI_CLOCK);
-	if (IS_ERR(spi_clk)) {
-		printk(KERN_WARNING "sprdfb: get spi clock fail!\n");
-		return ;
-	} else {
-		pr_debug(KERN_INFO "sprdfb: get spi clock ok!\n");
-	}
-	spi_src_clk = of_clk_get_by_name(device->of_node, FB_SPI_CLOCK_PARENT);
-	if (IS_ERR(spi_src_clk)) {
-		printk(KERN_WARNING "sprdfb: get spi clock parent fail!\n");
-		return ;
-	} else {
-		pr_debug(KERN_INFO "sprdfb: get spi clock parent ok!\n");
-	}
-#endif
 	clk_set_parent(spi_clk, spi_src_clk);
 	clk_set_rate(spi_clk, SPI_DEF_SRC_CLK);
 }
@@ -152,7 +112,7 @@ void SPI_SetCd( uint32_t cd)
 	}
 }
 
-#if 0
+
 static void SPI_SetSpiMode(uint32_t spi_mode)
 {
 	volatile SPI_CTL_REG_T *spi_ctr_ptr = (volatile SPI_CTL_REG_T *)(used_spi_reg_base);
@@ -163,7 +123,6 @@ static void SPI_SetSpiMode(uint32_t spi_mode)
 
 	spi_ctr_ptr->ctl7 = temp;
 }
-#endif
 
 void  SPI_SetDatawidth(uint32_t datawidth)
 {
@@ -226,22 +185,15 @@ static void SPI_RxReq( void )
 	spi_ctr_ptr->ctl12 |= SW_RX_REQ_MASK;
 }
 
-#ifdef CONFIG_OF
-void SPI_Init(struct device *device, u32 spi_id, SPI_INIT_PARM *spi_parm)
-#else
 void SPI_Init(u32 spi_id, SPI_INIT_PARM *spi_parm)
-#endif
 {
 	volatile SPI_CTL_REG_T *spi_ctr_ptr;
 	u32 temp;
+	u32 ctl0, ctl1, ctl3;
 
-#ifdef CONFIG_OF
-	SPI_ClkSetting(device);
-	SPI_Enable(device, true);
-#else
 	SPI_ClkSetting(spi_id);
+
 	SPI_Enable(spi_id, true);
-#endif
 
 	SPI_Reset(spi_id);
 
@@ -282,7 +234,7 @@ void SPI_Init(u32 spi_id, SPI_INIT_PARM *spi_parm)
 	spi_ctr_ptr->ctl7 |= SPIMODE_3WIRE_9BIT_SDIO << 3;
 }
 
-static void SPI_WaitTxFinish(void)
+static void SPI_WaitTxFinish()
 {
 	volatile SPI_CTL_REG_T *spi_ctr_ptr = (volatile SPI_CTL_REG_T *)(used_spi_reg_base);
 

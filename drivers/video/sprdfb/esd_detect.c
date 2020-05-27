@@ -6,149 +6,179 @@
 #include <linux/mutex.h>
 #include "esd_detect.h"
 
-static inline int esd_det_clear_irq(int irq)
+#define ESD_INTERVAL	(1000)
+#define ESD_BOOT_INTERVAL (30000)
+
+static void esd_dwork_func(struct work_struct *work)
 {
-	struct irq_desc *desc = irq_to_desc(irq);
-	struct irq_data *idata = irq_desc_get_irq_data(desc);
-	struct irq_chip *chip = irq_desc_get_chip(desc);
+	struct esd_det_info *info =
+		container_of(work, struct esd_det_info, dwork.work);
+    static int count = 0;
 
-	/*
-	 * Block pending interrupt after irq disabled.
-	 * if CONFIG_HARDIRQS_SW_RESEND is set,
-	 * pending irq is re-send when irq is enabled.
-	 * irq_ack clears pending interrupt.
-	 */
-	if (chip->irq_ack)
-		chip->irq_ack(idata);
-
-	return 0;
-}
-
-static inline int esd_status(struct esd_det_info *esd)
-{
-	int gpio = esd->gpio, type = esd->type, status;
-
-	if (unlikely(gpio < 0)) {
-		pr_warn("[LCD] %s: vgh pin unused\n", __func__);
-		return -ENODEV;
-	}
-
-	if (type == ESD_TRIGGER_RISING || type == ESD_TRIGGER_HIGH)
-		status = gpio_get_value(gpio) ?
-			ESD_STATUS_NG : ESD_STATUS_OK;
-	else if (type == ESD_TRIGGER_FALLING || type == ESD_TRIGGER_LOW)
-		status = !gpio_get_value(gpio) ?
-			ESD_STATUS_NG : ESD_STATUS_OK;
-	else
-		status = ESD_STATUS_NG;
-
-	return status;
-}
-
-static void esd_work(struct work_struct *work)
-{
-	struct esd_det_info *esd = (struct esd_det_info *)
-		container_of(work, struct esd_det_info, work.work);
-	int retry = 5;
-
-	if (esd->type == ESD_POLLING) {
-		/* Todo : ESD_POLLING */
+	if (!info->is_active(info->pdata))
 		goto out;
-	}
 
-	do {
-		if (esd->backlight_power)
-			esd->backlight_power(0);
+	if (gpio_get_value(info->gpio) == 1)
+        count++;
+    else
+        count = 0;
 
-		if (esd->recover)
-			esd->recover(esd->pdata);
+    if(count >= 10)
+    {
+		info->recover(info->pdata);
+        count = 0;
+    }
 
-		if (esd->backlight_power) {
-			mdelay(100);
-			esd->backlight_power(1);
-		}
-
-	} while ((esd_status(esd) != ESD_STATUS_OK) && --retry);
-
-	pr_info("[LCD] %s, %s to recover\n", __func__,
-			retry ? "succeeded" : "failed");
+	queue_delayed_work(system_power_efficient_wq, &info->dwork,
+			msecs_to_jiffies(ESD_INTERVAL));
 out:
-	esd_det_enable(esd);
+	return;
+}
 
+static void esd_work_func(struct work_struct *work)
+{
+	struct esd_det_info *info = 
+		container_of(work, struct esd_det_info, work);
+	int esd_irq = gpio_to_irq(info->gpio);
+	int retry = 3;
+
+	printk("%s, gpio[%d] = %s\n", __func__,
+			info->gpio, gpio_get_value(info->gpio) ? "high" : "low");
+
+	if (!info->is_active(info->pdata))
+		goto out;
+
+    info->backlight_off();
+	info->recover(info->pdata);
+    mdelay(100);
+    info->backlight_on();
+	enable_irq(esd_irq);
+out:
 	return;
 }
 
 static irqreturn_t esd_irq_handler(int irq, void *dev_id)
 {
-	struct esd_det_info *esd = (struct esd_det_info *)dev_id;
+	struct esd_det_info *info = (struct esd_det_info *)dev_id;
+	int esd_irq = gpio_to_irq(info->gpio);
 
-	disable_irq_nosync(irq);
-	queue_delayed_work(esd->wq, &esd->work, 0);
-	pr_info("[LCD] %s, esd detected!!\n", __func__);
+    if(info->state == ESD_DET_ON) {
+		disable_irq_nosync(esd_irq);
+		queue_work(info->wq, &info->work);
 
+		printk("%s, esd detected %d\n", __func__);
+    }
 	return IRQ_HANDLED;
 }
 
-int esd_det_disable(struct esd_det_info *esd)
+int esd_det_disable(struct esd_det_info *info)
 {
-	if(!esd || esd->gpio <= 0)
-		return -1;
-	
-	if (esd->type == ESD_POLLING)
-		cancel_delayed_work_sync(&esd->work);
-	else
-		disable_irq(gpio_to_irq(esd->gpio));
+	printk("%s, disable mode : %d state : %d\n", __func__, info->mode, info->state);
+
+	if (info->state == ESD_DET_NOT_INITIALIZED ||
+		info->state == ESD_DET_OFF)
+		return 0;
+
+	if (info->mode == ESD_DET_INTERRUPT) {
+		int esd_irq = gpio_to_irq(info->gpio);
+		/*
+		 * Block pending interrupt after irq disabled.
+		 * if CONFIG_HARDIRQS_SW_RESEND is set,
+		 * pending irq is re-send when irq is enabled.
+		 */
+		disable_irq(esd_irq);
+		printk("%s, disable irq : %d\n", __func__, esd_irq);
+	} else if (info->mode == ESD_DET_POLLING) {
+		cancel_delayed_work(&info->dwork);
+	}
+	info->state = ESD_DET_OFF;
 
 	return 0;
 }
 
-int esd_det_enable(struct esd_det_info *esd)
+int esd_det_enable(struct esd_det_info *info)
 {
-	if(!esd || esd->gpio <= 0)
-		return -1;
+	printk("%s, enable mode : %d state : %d, gpio : %d\n", __func__, info->mode, info->state, gpio_get_value(info->gpio));
 
-	if (esd->type == ESD_POLLING)
-		queue_delayed_work(esd->wq, &esd->work, HZ);
-	else {
-		int irq = gpio_to_irq(esd->gpio);
-		esd_det_clear_irq(irq);
-		enable_irq(irq);
+    if (info->state == ESD_DET_NOT_INITIALIZED ||
+		info->state == ESD_DET_ON)
+		return 0;
+
+	if (info->mode == ESD_DET_INTERRUPT) {
+		int esd_irq = gpio_to_irq(info->gpio);
+
+		printk("%s, enable irq : %d\n", __func__, esd_irq);
+		info->state = ESD_DET_ON;    // Not to change for ESD_DET_POLLING (Review in Progress)
+		enable_irq(esd_irq);
+	} else if (info->mode == ESD_DET_POLLING) {
+		queue_delayed_work(system_power_efficient_wq, &info->dwork,
+				msecs_to_jiffies(ESD_INTERVAL));
 	}
+	info->state = ESD_DET_ON;
 
 	return 0;
 }
 
-int esd_det_init(struct esd_det_info *esd)
+int esd_det_init(struct esd_det_info *info)
 {
-	int ret, irq = 0;
+	if (info->mode == ESD_DET_POLLING) {
+		char gpio_name[256];
 
-	if(esd->gpio <= 0)
-		return -1;
+		snprintf(gpio_name, sizeof(gpio_name), "esd_det_gpio_%d", info->gpio);
+		if (gpio_request(info->gpio, gpio_name)) {
+			printk(KERN_ERR "failed to request gpio %d\n", info->gpio);
+			return -1;
+		}
+		gpio_direction_input(info->gpio);
 
-	irq= gpio_to_irq(esd->gpio);
+		INIT_DELAYED_WORK(&info->dwork, esd_dwork_func); // ESD self protect
+		queue_delayed_work(system_power_efficient_wq, &info->dwork,
+				msecs_to_jiffies(ESD_BOOT_INTERVAL));
+	} else if (info->mode == ESD_DET_INTERRUPT) {
+		int esd_irq = gpio_to_irq(info->gpio);
+		char gpio_name[256];
 
-	if (gpio_request(esd->gpio, "dsi-esd")) {
-		pr_err("[LCD] %s, failed to request gpio %d\n",
-				__func__, esd->gpio);
-		return -1;
+		snprintf(gpio_name, sizeof(gpio_name), "esd_det_gpio_%d", info->gpio);
+		if (gpio_request(info->gpio, gpio_name)) {
+			printk(KERN_ERR "\n failed to request gpio %d\n", info->gpio);
+			return -1;
+		}
+		gpio_direction_input(info->gpio);
+		gpio_free(info->gpio);
+
+		if (info->level == ESD_DET_HIGH) {
+			printk("%s, rising edge\n", __func__);
+			irq_set_status_flags(esd_irq, IRQ_NOAUTOEN);
+			if (request_irq(esd_irq, esd_irq_handler,
+    					IRQF_TRIGGER_HIGH,
+    					gpio_name, info)) {
+    			printk("%s, request_irq failed for esd\n", __func__);
+    			return -1;
+    		}
+		} else {
+			printk("%s, falling edge\n", __func__);
+			irq_set_status_flags(esd_irq, IRQ_NOAUTOEN);	
+    		if (request_irq(esd_irq, esd_irq_handler,
+    					IRQF_TRIGGER_LOW,
+    					gpio_name, info)) {
+    			printk("%s, request_irq failed for esd\n", __func__);
+    			return -1;
+    		}
+		}
+		
+   		
+
+		if (!(info->wq = create_singlethread_workqueue(gpio_name))) {
+			printk("%s, fail to create workqueue!!\n", __func__);
+			return -1;
+		}
+		INIT_WORK(&info->work, esd_work_func);
+		printk("%s, create workqueue, %s\n", __func__, gpio_name);
+		info->state = ESD_DET_ON;  // To avoid the State check in IRQ handler 
+		enable_irq(esd_irq);
+		printk("%s, request irq success : %d\n", __func__, esd_irq);
 	}
-	gpio_direction_input(esd->gpio);
-
-	INIT_DELAYED_WORK(&esd->work, esd_work);
-	esd->wq = alloc_workqueue("dsi-esd", WQ_HIGHPRI
-				| WQ_UNBOUND | WQ_MEM_RECLAIM, 1);
-
-	irq_set_status_flags(irq, IRQ_NOAUTOEN);
-	ret = request_irq(irq, esd_irq_handler, esd->type,
-			"dsi-esd", esd);
-	if (unlikely(ret)) {
-		pr_err("[LCD] %s, request_irq (%d) failed(%d)\n",
-				__func__, irq, ret);
-		return ret;
-	}
-	pr_info("[LCD] %s: type:%s, gpio:%d\n", __func__,
-			esd->type != ESD_POLLING ?
-			"intr" : "poll", esd->gpio);
+	info->state = ESD_DET_ON;   // Not to change for ESD_DET_POLLING (Review in Progress)
 
 	return 0;
 }

@@ -15,6 +15,7 @@
 #define _DISPC_REG_H_
 
 #include <asm/io.h>
+#include <mach/hardware.h>
 
 #include "sprdfb_chip_common.h"
 
@@ -22,11 +23,8 @@
 #define DISPC_CTRL		(0x0000)
 #define DISPC_SIZE_XY		(0x0004)
 #define DISPC_RSTN		(0x0008)
-#define DISPC_BUF_THRES (0x000C)
 
 #define DISPC_STS			(0x0010)
-
-#define DISPC_LVDS_CTRL			(0x0018)
 
 #define DISPC_IMG_CTRL			(0x0020)
 #define DISPC_IMG_Y_BASE_ADDR	(0x0024)
@@ -46,7 +44,7 @@
 #define DISPC_OSD_CK			(0x0058)
 
 #define DISPC_Y2R_CTRL			(0x0060)
-#ifndef CONFIG_FB_SCX35
+#ifdef CONFIG_FB_SCX15
 #define DISPC_Y2R_Y_PARAM		(0x0064)
 #define DISPC_Y2R_U_PARAM		(0x0068)
 #define DISPC_Y2R_V_PARAM		(0x006c)
@@ -74,7 +72,7 @@
 #define DISPC_DBI_CMD		(0x00b0)
 #define DISPC_DBI_DATA		(0x00b4)
 #define DISPC_DBI_QUEUE		(0x00b8)
-#define DISPC_TE_SYNC_DELAY	(0x00bc)
+
 
 
 //shadow register , read only
@@ -99,23 +97,10 @@
 #define SHDW_Y2R_BRIGHTNESS			(0x010C)
 #define SHDW_DPI_H_TIMING			(0x0110)
 #define SHDW_DPI_V_TIMING			(0x0114)
-
+#define DISPC_TE_SYNC_DELAY	(0x00bc)
 
 #define AHB_MATRIX_CLOCK (0x0208)
 #define REG_AHB_MATRIX_CLOCK (AHB_MATRIX_CLOCK + SPRD_AHB_BASE)
-
-#define DISPC_INT_DONE_MASK          BIT(0)
-#define DISPC_INT_TE_MASK            BIT(1)
-#define DISPC_INT_ERR_MASK           BIT(2)
-#define DISPC_INT_EDPI_TE_MASK       BIT(3)
-#define DISPC_INT_UPDATE_DONE_MASK   BIT(4)
-#define DISPC_INT_DPI_VSYNC_MASK     BIT(5)
-
-#if (defined(CONFIG_FB_SCX30G) || defined(CONFIG_FB_SCX35L))
-#define DISPC_INT_HWVSYNC DISPC_INT_DPI_VSYNC_MASK
-#else
-#define DISPC_INT_HWVSYNC DISPC_INT_DONE_MASK
-#endif
 
 typedef enum _DispC_Int_Type_
 {
@@ -134,26 +119,15 @@ typedef enum _DispC_Int_Type_
 	dispc_write(reg_val, DISPC_INT_EN);\
 }
 
-#ifdef CONFIG_OF
-extern unsigned long g_dispc_base_addr;
-#endif
-
 static inline uint32_t dispc_read(uint32_t reg)
 {
-#ifdef CONFIG_OF
-	return __raw_readl(g_dispc_base_addr+ reg);
-#else
-	return __raw_readl(SPRD_DISPC_BASE + reg);
-#endif
+	return dispc_glb_read(SPRD_DISPC_BASE + reg);
 }
 
 static inline void dispc_write(uint32_t value, uint32_t reg)
 {
-#ifdef CONFIG_OF
-	__raw_writel(value, (g_dispc_base_addr + reg));
-#else
-	__raw_writel(value, (SPRD_DISPC_BASE + reg));
-#endif
+//	__raw_writel(value, (SPRD_DISPC_BASE + reg));
+	sci_glb_write((SPRD_DISPC_BASE + reg), value, 0xffffffff);
 }
 
 static inline void dispc_set_bits(uint32_t bits, uint32_t reg)

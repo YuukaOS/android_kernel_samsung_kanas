@@ -8,34 +8,47 @@
 #include <linux/delay.h>
 #include <linux/mutex.h>
 
-enum {
-	ESD_STATUS_OK = 0,
-	ESD_STATUS_NG = 1,
+enum esd_det_mode {
+	ESD_DET_POLLING,
+	ESD_DET_INTERRUPT,
+	ESD_DET_NOT_REQUIRED, /* For HIMAX LDI, we do not need ESD Recovery function because the Panel is immune to ESD */
 };
 
-enum {
-	ESD_POLLING = IRQF_TRIGGER_NONE,
-	ESD_TRIGGER_RISING = IRQF_TRIGGER_RISING,
-	ESD_TRIGGER_FALLING = IRQF_TRIGGER_FALLING,
-	ESD_TRIGGER_HIGH = IRQF_TRIGGER_HIGH,
-	ESD_TRIGGER_LOW = IRQF_TRIGGER_LOW,
+enum esd_det_level {
+	ESD_DET_LOW = 0,
+	ESD_DET_HIGH = 1,
+};
+
+enum esd_det_result {
+	ESD_DETECTED,
+	ESD_NOT_DETECTED,
+};
+
+enum esd_det_status {
+	ESD_DET_NOT_INITIALIZED,
+	ESD_DET_OFF,
+	ESD_DET_ON,
 };
 
 struct esd_det_info {
 	char *name;	/* device name */
 	void *pdata;	/* private data for device */
-	int type;	/* esd detect mode (interrupt or polling) */
+	int mode;	/* esd detect mode (interrupt or polling) */
 	int gpio;	/* esd detect gpio num */
+	int level;	/* esd detect gpio level */
+	int state;	/* esd detect driver state */
 
 	/* internal use work queue */
 	struct workqueue_struct *wq;
-	struct delayed_work work;
+	struct work_struct work;
+	struct delayed_work dwork;
 
 	struct mutex *lock;		/* device lock */
 	bool (*is_active)(void *pdata);	/* device activated */
 	int (*is_normal)(void *pdata);	/* device esd checking */
 	int (*recover)(void *pdata);	/* device recovery */
-	void (*backlight_power)(int on);/* device backlight */
+    void (*backlight_on)(void);
+    void (*backlight_off)(void);
 };
 
 int esd_det_init(struct esd_det_info *det);
