@@ -284,6 +284,7 @@ static int sprdfb_ioctl(struct fb_info *info, unsigned int cmd, \
 #ifdef CONFIG_FB_LCD_OVERLAY_SUPPORT
 	overlay_info local_overlay_info;
 	overlay_display local_overlay_display;
+	overlay_alpha local_overlay_alpha_setting;
 	void __user *argp = (void __user *)arg;
 #endif
 	if (NULL == info) {
@@ -325,6 +326,17 @@ static int sprdfb_ioctl(struct fb_info *info, unsigned int cmd, \
 		if (NULL != dev->ctrl->display_overlay)
 			result = dev->ctrl->display_overlay(dev, \
 							&local_overlay_display);
+		break;
+	case SPRD_FB_SET_OVERLAY_ALPHA:
+		pr_debug(KERN_INFO "sprdfb: [%s]: SPRD_FB_SET_OVERLAY_ALPHA\n", __FUNCTION__);
+
+		memset(&local_overlay_alpha_setting, 0, sizeof(local_overlay_alpha_setting));
+		if (copy_from_user(&local_overlay_alpha_setting, argp, sizeof(local_overlay_alpha_setting))) {
+			pr_err("sprdfb: SET_OVERLAY_ALPHA copy failed!\n");
+			return -EFAULT;
+		}
+		if (NULL != dev->ctrl->set_overlay_alpha)
+			result = dev->ctrl->set_overlay_alpha(dev, &local_overlay_alpha_setting);
 		break;
 #endif
 #ifdef CONFIG_FB_VSYNC_SUPPORT

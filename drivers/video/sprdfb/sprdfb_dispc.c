@@ -1618,9 +1618,6 @@ static int overlay_start(struct sprdfb_device *dev, uint32_t layer_index)
 		return -1;
 	}
 */
-	dispc_set_bg_color(0x0);
-	dispc_clear_bits(BIT(2), DISPC_OSD_CTRL); /*use pixel alpha*/
-	dispc_write(0x80, DISPC_OSD_ALPHA);
 
 	if((layer_index & SPRD_LAYER_IMG) && (0 != dispc_read(DISPC_IMG_Y_BASE_ADDR))){
 		dispc_set_bits(BIT(0), DISPC_IMG_CTRL);/* enable the image layer */
@@ -1952,6 +1949,49 @@ ERROR_DISPLAY_OVERLAY:
 	pr_debug("DISPC_OSD_PITCH: 0x%x\n", dispc_read(DISPC_OSD_PITCH));
 	pr_debug("DISPC_OSD_DISP_XY: 0x%x\n", dispc_read(DISPC_OSD_DISP_XY));
 	pr_debug("DISPC_OSD_ALPHA	: 0x%x\n", dispc_read(DISPC_OSD_ALPHA));
+	return 0;
+}
+
+static int sprdfb_dispc_set_overlay_alpha(struct sprdfb_device *dev, struct overlay_alpha *setting)
+{
+	uint32_t reg = DISPC_OSD_CTRL;
+
+	pr_debug("sprdfb: [%s] : alpha: %d mode: %d\n", __FUNCTION__, setting->alpha, setting->mode);
+
+
+	if(SPRD_OVERLAY_STATUS_ON != dispc_ctx.overlay_state) {
+		pr_err("sprdfb: Overlay config fail (not opened)");
+		return -1;
+	}
+
+	if ((setting->alpha < 0) || (setting->alpha > 255)) {
+		pr_err("sprdfb: Overlay config fail (invalid alpha value)");
+		return -1;
+	}
+
+	if ((setting->mode != 0) && (setting->mode != 1)){
+		printk(KERN_ERR "sprdfb: Overlay config fail (unknown mode)");
+		return -1;
+	}
+
+
+	if (setting->layer_index == SPRD_LAYER_OSD) {
+		reg = DISPC_OSD_CTRL;
+		dispc_set_osd_ck(0);
+	} else if (setting->layer_index == SPRD_LAYER_IMG) {
+		reg = DISPC_IMG_CTRL;
+		dispc_set_bg_color(0);
+	} else {
+		// Do nothing
+		return 0;
+	}
+
+	dispc_write(setting->alpha, DISPC_OSD_ALPHA);
+	if (setting->mode)
+		dispc_clear_bits(BIT(2), reg); /*use premultiplied alpha*/
+	else
+		dispc_set_bits(BIT(2), reg); /*use block alpha*/
+
 	return 0;
 }
 
@@ -2339,6 +2379,7 @@ struct display_ctrl sprdfb_dispc_ctrl = {
 #endif
 #ifdef CONFIG_FB_LCD_OVERLAY_SUPPORT
 	.enable_overlay = sprdfb_dispc_enable_overlay,
+	.set_overlay_alpha = sprdfb_dispc_set_overlay_alpha,
 	.display_overlay = sprdfb_dispc_display_overlay,
 #endif
 #ifdef CONFIG_FB_VSYNC_SUPPORT

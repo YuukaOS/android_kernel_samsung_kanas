@@ -29,7 +29,9 @@ enum {
 
 enum{
 	SPRD_DATA_ENDIAN_B0B1B2B3 = 0,
-	SPRD_DATA_ENDIAN_B3B2B1B0,	SPRD_DATA_ENDIAN_B2B3B0B1,	SPRD_DATA_ENDIAN_B1B0B3B2,
+	SPRD_DATA_ENDIAN_B3B2B1B0,
+	SPRD_DATA_ENDIAN_B2B3B0B1,
+	SPRD_DATA_ENDIAN_B1B0B3B2,
 	SPRD_DATA_ENDIAN_LIMIT
 };
 
@@ -62,6 +64,12 @@ typedef struct overlay_display_setting{
 	int display_mode;
 }overlay_display_setting;
 
+typedef struct overlay_alpha_setting{
+	int layer_index;
+	int alpha;
+	int mode;
+}overlay_alpha_setting;
+
 /*
 int sprdfb_IOinit(void);
 int sprdfb_IOdeinit(void);
@@ -70,6 +78,7 @@ int sprdfb_IOdeinit(void);
 
 #define SPRD_FB_IOCTL_MAGIC 'm'
 #define SPRD_FB_SET_OVERLAY _IOW(SPRD_FB_IOCTL_MAGIC, 1, unsigned int)
+#define SPRD_FB_SET_OVERLAY_ALPHA _IOW(SPRD_FB_IOCTL_MAGIC, 5, unsigned int)
 #define SPRD_FB_DISPLAY_OVERLAY _IOW(SPRD_FB_IOCTL_MAGIC, 2, unsigned int)
 #define SPRD_FB_CHANGE_FPS _IOW(SPRD_FB_IOCTL_MAGIC, 3, unsigned int)
 #define SPRD_FB_IS_REFRESH_DONE _IOW(SPRD_FB_IOCTL_MAGIC, 4, unsigned int)

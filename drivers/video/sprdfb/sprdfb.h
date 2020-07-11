@@ -110,6 +110,12 @@ typedef struct overlay_display {
 	overlay_rect rect;
 	int display_mode;
 } overlay_display;
+
+typedef struct overlay_alpha {
+	int layer_index;
+	int alpha;
+	int mode;
+}overlay_alpha;
 #endif
 
 struct sprdfb_device {
@@ -189,6 +195,8 @@ struct display_ctrl {
 #ifdef  CONFIG_FB_LCD_OVERLAY_SUPPORT
 	int32_t	(*enable_overlay) (struct sprdfb_device *dev, \
 					struct overlay_info* info, int enable);
+	int32_t	(*set_overlay_alpha) (struct sprdfb_device *dev, \
+					struct overlay_alpha* setting);
 	int32_t	(*display_overlay) (struct sprdfb_device *dev, \
 					struct overlay_display* setting);
 #endif
