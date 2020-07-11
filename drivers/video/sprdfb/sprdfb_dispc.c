@@ -1619,6 +1619,8 @@ static int overlay_start(struct sprdfb_device *dev, uint32_t layer_index)
 	}
 */
 
+	dispc_set_bg_color(0x0);
+
 	if((layer_index & SPRD_LAYER_IMG) && (0 != dispc_read(DISPC_IMG_Y_BASE_ADDR))){
 		dispc_set_bits(BIT(0), DISPC_IMG_CTRL);/* enable the image layer */
 	}
