@@ -33,7 +33,6 @@ struct sci_dma_desc {
 
 static struct sci_dma_desc *dma_chns;
 
-static DEFINE_SPINLOCK(dma_lock);
 static DEFINE_MUTEX(dma_mutex);
 
 static void __inline __dma_clk_enable(void)
@@ -330,14 +329,10 @@ static irqreturn_t __dma_irq_handle(int irq, void *dev_id)
 	u32 irq_status;
 	u32 reg_addr;
 
-	spin_lock(&dma_lock);
-
 	irq_status = readl(DMA_INT_MSK_STS);
 
-	if (unlikely(0 == irq_status)) {
-		spin_unlock(&dma_lock);
+	if (unlikely(0 == irq_status))
 		return IRQ_NONE;
-	}
 
 	/*read again */
 	irq_status = readl(DMA_INT_MSK_STS);
@@ -350,13 +345,12 @@ static irqreturn_t __dma_irq_handle(int irq, void *dev_id)
 		/*clean all type interrupt */
 		writel(readl(reg_addr) | (0x1f << 24), reg_addr);
 
-		if (dma_chns[i + 1].irq_handler)
+		if (dma_chns[i + 1].irq_handler) {
 			/*audio driver need to get the dma chn */
 			dma_chns[i + 1].irq_handler(i + 1,
 						    dma_chns[i + 1].data);
+		}
 	}
-
-	spin_unlock(&dma_lock);
 
 	return IRQ_HANDLED;
 }
