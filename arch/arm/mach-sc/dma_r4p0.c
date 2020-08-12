@@ -706,7 +706,8 @@ static int __init sci_init_dma(void)
 
 	__dma_clk_disable();
 
-	ret = request_irq(IRQ_DMA_INT, __dma_irq_handle, 0, "sci-dma", NULL);
+	ret = request_threaded_irq(IRQ_DMA_INT, NULL, __dma_irq_handle, IRQF_ONESHOT, "sci-dma", NULL);
+
 	if (ret) {
 		printk(KERN_ERR "request dma irq failed %d\n", ret);
 		goto request_irq_err;
